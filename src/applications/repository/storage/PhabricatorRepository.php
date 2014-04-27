@@ -343,7 +343,7 @@ final class PhabricatorRepository extends PhabricatorRepositoryDAO
       // NOTE: Force the language to "en_US.UTF-8", which overrides locale
       // settings. This makes stuff print in English instead of, e.g., French,
       // so we can parse the output of some commands, error messages, etc.
-      'LANG' => 'en_US.UTF-8',
+      'LANG' => 'zh_CN.UTF-8',
 
       // Propagate PHABRICATOR_ENV explicitly. For discussion, see T4155.
       'PHABRICATOR_ENV' => PhabricatorEnv::getSelectedEnvironmentName(),
