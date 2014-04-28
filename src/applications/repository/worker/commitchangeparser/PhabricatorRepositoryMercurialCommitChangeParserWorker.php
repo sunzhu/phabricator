@@ -31,6 +31,10 @@ final class PhabricatorRepositoryMercurialCommitChangeParserWorker
     // Parse the basic information from "hg status", which shows files that
     // were directly affected by the change.
     foreach ($status as $path => $path_info) {
+	if(!phutil_is_utf8_with_only_bmp_characters($path))
+	{
+		$path=iconv("GBK","UTF-8",$path);
+	}
       $path = '/'.$path;
       $flags = $path_info['flags'];
       $change_target = $path_info['from'] ? '/'.$path_info['from'] : null;
