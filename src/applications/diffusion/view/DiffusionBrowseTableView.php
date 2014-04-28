@@ -268,7 +268,10 @@ final class DiffusionBrowseTableView extends DiffusionView {
   private function renderPathIcon($type, $text) {
 
     require_celerity_resource('diffusion-icons-css');
-
+	if(!phutil_is_utf8($text))
+	{
+		$text=iconv("GBK","UTF-8",$text);
+	}
     return phutil_tag(
       'span',
       array(
