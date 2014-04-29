@@ -304,6 +304,10 @@ final class AphrontTableView extends AphrontView {
     // (&nbsp; -- nonbreaking space) afterward to give the bounds div height
     // (alternatively, we could hard-code the line height). This is gross but
     // it's not clear that there's a better appraoch.
+	if(!phutil_is_utf8($line))
+	{
+		$line=mb_substr($line,0,20,"UTF-8")."...";
+	}
 
     return phutil_tag(
       'div',
