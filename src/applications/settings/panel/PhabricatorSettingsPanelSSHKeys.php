@@ -38,6 +38,11 @@ final class PhabricatorSettingsPanelSSHKeys
       return $this->renderKeyListView($request);
     }
 
+    $token = id(new PhabricatorAuthSessionEngine())->requireHighSecuritySession(
+      $viewer,
+      $request,
+      $this->getPanelURI());
+
     $id = nonempty($edit, $delete);
 
     if ($id && is_numeric($id)) {
