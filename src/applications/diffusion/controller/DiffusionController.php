@@ -40,24 +40,6 @@ abstract class DiffusionController extends PhabricatorController {
     }
   }
 
-  public function buildApplicationPage($view, array $options) {
-    $drequest = $this->getDiffusionRequest();
-    $repository = $drequest->getRepository();
-    $error_view = $this->buildRepositoryWarning($repository);
-
-    $views = array();
-    $not_inserted = true;
-    foreach ($view as $view_object_or_array) {
-      $views[] = $view_object_or_array;
-      if ($not_inserted &&
-          $view_object_or_array instanceof PhabricatorCrumbsView) {
-        $views[] = $error_view;
-        $not_inserted = false;
-      }
-    }
-    return parent::buildApplicationPage($views, $options);
-  }
-
   public function buildCrumbs(array $spec = array()) {
     $crumbs = $this->buildApplicationCrumbs();
     $crumb_list = $this->buildCrumbList($spec);
@@ -253,23 +235,4 @@ abstract class DiffusionController extends PhabricatorController {
       ->appendChild($body);
   }
 
-  private function buildRepositoryWarning(PhabricatorRepository $repository) {
-    $error_view = null;
-    $title = null;
-    if ($repository->isImporting()) {
-      $title = pht('This repository is still importing.');
-      $body = pht('Things may not work properly until the import finishes.');
-    } else if (!$repository->isTracked()) {
-      $title = pht('This repository is not tracked.');
-      $body = pht(
-        'Things may not work properly until tracking is enabled and '.
-        'importing finishes.');
-    }
-
-    if ($title) {
-      $error_view = $this->renderStatusMessage($title, $body);
-    }
-
-    return $error_view;
-  }
 }
