@@ -26,9 +26,10 @@ final class PhabricatorDashboardPanelTypeText
     );
   }
 
-  protected function renderPanelContent(
+  public function renderPanelContent(
     PhabricatorUser $viewer,
-    PhabricatorDashboardPanel $panel) {
+    PhabricatorDashboardPanel $panel,
+    PhabricatorDashboardPanelRenderingEngine $engine) {
 
     $text = $panel->getProperty('text', '');
 
