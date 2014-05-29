@@ -21,7 +21,8 @@ final class PhabricatorApplicationDashboard extends PhabricatorApplication {
         '(?:query/(?P<queryKey>[^/]+)/)?'
           => 'PhabricatorDashboardListController',
         'view/(?P<id>\d+)/' => 'PhabricatorDashboardViewController',
-        'arrange/(?P<id>\d+)/' => 'PhabricatorDashboardArrangeController',
+        'manage/(?P<id>\d+)/' => 'PhabricatorDashboardManageController',
+        'history/(?P<id>\d+)/' => 'PhabricatorDashboardHistoryController',
         'create/' => 'PhabricatorDashboardEditController',
         'edit/(?:(?P<id>\d+)/)?' => 'PhabricatorDashboardEditController',
         'install/(?P<id>\d+)/' => 'PhabricatorDashboardInstallController',

@@ -12,8 +12,10 @@ final class PhabricatorProjectTransactionEditor
     $types[] = PhabricatorTransactions::TYPE_JOIN_POLICY;
 
     $types[] = PhabricatorProjectTransaction::TYPE_NAME;
+    $types[] = PhabricatorProjectTransaction::TYPE_SLUGS;
     $types[] = PhabricatorProjectTransaction::TYPE_STATUS;
     $types[] = PhabricatorProjectTransaction::TYPE_IMAGE;
+    $types[] = PhabricatorProjectTransaction::TYPE_ICON;
 
     return $types;
   }
@@ -25,10 +27,17 @@ final class PhabricatorProjectTransactionEditor
     switch ($xaction->getTransactionType()) {
       case PhabricatorProjectTransaction::TYPE_NAME:
         return $object->getName();
+      case PhabricatorProjectTransaction::TYPE_SLUGS:
+        $slugs = $object->getSlugs();
+        $slugs = mpull($slugs, 'getSlug', 'getSlug');
+        unset($slugs[$object->getPrimarySlug()]);
+        return $slugs;
       case PhabricatorProjectTransaction::TYPE_STATUS:
         return $object->getStatus();
       case PhabricatorProjectTransaction::TYPE_IMAGE:
         return $object->getProfileImagePHID();
+      case PhabricatorProjectTransaction::TYPE_ICON:
+        return $object->getIcon();
     }
 
     return parent::getCustomTransactionOldValue($object, $xaction);
@@ -40,8 +49,10 @@ final class PhabricatorProjectTransactionEditor
 
     switch ($xaction->getTransactionType()) {
       case PhabricatorProjectTransaction::TYPE_NAME:
+      case PhabricatorProjectTransaction::TYPE_SLUGS:
       case PhabricatorProjectTransaction::TYPE_STATUS:
       case PhabricatorProjectTransaction::TYPE_IMAGE:
+      case PhabricatorProjectTransaction::TYPE_ICON:
         return $xaction->getNewValue();
     }
 
@@ -57,11 +68,16 @@ final class PhabricatorProjectTransactionEditor
         $object->setName($xaction->getNewValue());
         $object->setPhrictionSlug($xaction->getNewValue());
         return;
+      case PhabricatorProjectTransaction::TYPE_SLUGS:
+        return;
       case PhabricatorProjectTransaction::TYPE_STATUS:
         $object->setStatus($xaction->getNewValue());
         return;
       case PhabricatorProjectTransaction::TYPE_IMAGE:
         $object->setProfileImagePHID($xaction->getNewValue());
+        return;
+      case PhabricatorProjectTransaction::TYPE_ICON:
+        $object->setIcon($xaction->getNewValue());
         return;
       case PhabricatorTransactions::TYPE_EDGE:
         return;
@@ -85,6 +101,24 @@ final class PhabricatorProjectTransactionEditor
 
     switch ($xaction->getTransactionType()) {
       case PhabricatorProjectTransaction::TYPE_NAME:
+        $new_slug = id(new PhabricatorProjectSlug())
+          ->setSlug($object->getPrimarySlug())
+          ->setProjectPHID($object->getPHID())
+          ->save();
+
+        if ($xaction->getOldValue() !== null) {
+          $clone_object = clone $object;
+          $clone_object->setPhrictionSlug($xaction->getOldValue());
+          $old_slug = $clone_object->getPrimarySlug();
+          $old_slug = id(new PhabricatorProjectSlug())
+            ->loadOneWhere('slug = %s', $old_slug);
+          if ($old_slug) {
+            $old_slug->delete();
+          }
+        }
+
+        // TODO -- delete all of the below once we sever automagical project
+        // to phriction stuff
         if ($xaction->getOldValue() === null) {
           // Project was just created, we don't need to move anything.
           return;
@@ -118,11 +152,35 @@ final class PhabricatorProjectTransactionEditor
           $from_editor->moveAway($target_document->getID());
         }
         return;
+      case PhabricatorProjectTransaction::TYPE_SLUGS:
+        $old = $xaction->getOldValue();
+        $new = $xaction->getNewValue();
+        $add = array_diff($new, $old);
+        $rem = array_diff($old, $new);
+
+        if ($add) {
+          $add_slug_template = id(new PhabricatorProjectSlug())
+            ->setProjectPHID($object->getPHID());
+          foreach ($add as $add_slug_str) {
+            $add_slug = id(clone $add_slug_template)
+              ->setSlug($add_slug_str)
+              ->save();
+          }
+        }
+        if ($rem) {
+          $rem_slugs = id(new PhabricatorProjectSlug())
+            ->loadAllWhere('slug IN (%Ls)', $rem);
+          foreach ($rem_slugs as $rem_slug) {
+            $rem_slug->delete();
+          }
+        }
+        return;
       case PhabricatorTransactions::TYPE_VIEW_POLICY:
       case PhabricatorTransactions::TYPE_EDIT_POLICY:
       case PhabricatorTransactions::TYPE_JOIN_POLICY:
       case PhabricatorProjectTransaction::TYPE_STATUS:
       case PhabricatorProjectTransaction::TYPE_IMAGE:
+      case PhabricatorProjectTransaction::TYPE_ICON:
         return;
       case PhabricatorTransactions::TYPE_EDGE:
         $edge_type = $xaction->getMetadataValue('edge:type');
@@ -219,11 +277,71 @@ final class PhabricatorProjectTransactionEditor
            ($name_used_already->getPHID() != $object->getPHID())) {
           $error = new PhabricatorApplicationTransactionValidationError(
             $type,
-            pht(''),
+            pht('Duplicate'),
             pht('Project name is already used.'),
             nonempty(last($xactions), null));
           $errors[] = $error;
         }
+
+        $slug_builder = clone $object;
+        $slug_builder->setPhrictionSlug($name);
+        $slug = $slug_builder->getPrimarySlug();
+        $slug_used_already = id(new PhabricatorProjectSlug())
+          ->loadOneWhere('slug = %s', $slug);
+        if ($slug_used_already &&
+            $slug_used_already->getProjectPHID() != $object->getPHID()) {
+          $error = new PhabricatorApplicationTransactionValidationError(
+            $type,
+            pht('Duplicate'),
+            pht('Project name can not be used due to hashtag collision.'),
+            nonempty(last($xactions), null));
+          $errors[] = $error;
+        }
+        break;
+      case PhabricatorProjectTransaction::TYPE_SLUGS:
+        if (!$xactions) {
+          break;
+        }
+
+        $slug_xaction = last($xactions);
+        $new = $slug_xaction->getNewValue();
+
+        if ($new) {
+          $slugs_used_already = id(new PhabricatorProjectSlug())
+            ->loadAllWhere('slug IN (%Ls)', $new);
+        } else {
+          // The project doesn't have any extra slugs.
+          $slugs_used_already = array();
+        }
+
+        $slugs_used_already = mgroup($slugs_used_already, 'getProjectPHID');
+        foreach ($slugs_used_already as $project_phid => $used_slugs) {
+          $used_slug_strs = mpull($used_slugs, 'getSlug');
+          if ($project_phid == $object->getPHID()) {
+            if (in_array($object->getPrimarySlug(), $used_slug_strs)) {
+              $error = new PhabricatorApplicationTransactionValidationError(
+                $type,
+                pht('Invalid'),
+                pht(
+                  'Project hashtag %s is already the primary hashtag.',
+                  $object->getPrimarySlug()),
+                $slug_xaction);
+              $errors[] = $error;
+            }
+            continue;
+          }
+
+          $error = new PhabricatorApplicationTransactionValidationError(
+            $type,
+            pht('Invalid'),
+            pht(
+              '%d project hashtag(s) are already used: %s',
+              count($used_slug_strs),
+              implode(', ', $used_slug_strs)),
+            $slug_xaction);
+          $errors[] = $error;
+        }
+
         break;
     }
 
@@ -239,6 +357,7 @@ final class PhabricatorProjectTransactionEditor
       case PhabricatorProjectTransaction::TYPE_NAME:
       case PhabricatorProjectTransaction::TYPE_STATUS:
       case PhabricatorProjectTransaction::TYPE_IMAGE:
+      case PhabricatorProjectTransaction::TYPE_ICON:
         PhabricatorPolicyFilter::requireCapability(
           $this->requireActor(),
           $object,
