@@ -14,6 +14,14 @@ final class PhabricatorApplicationAuth extends PhabricatorApplication {
     return 'authentication';
   }
 
+  public function isPinnedByDefault(PhabricatorUser $viewer) {
+    return $viewer->getIsAdmin();
+  }
+
+  public function getShortDescription() {
+    return pht('Login/Registration');
+  }
+
   public function getHelpURI() {
     // NOTE: Although reasonable help exists for this in "Configuring Accounts
     // and Registration", specifying a help URI here means we get the menu
@@ -93,6 +101,8 @@ final class PhabricatorApplicationAuth extends PhabricatorApplication {
           => 'PhabricatorAuthTerminateSessionController',
         'session/downgrade/'
           => 'PhabricatorAuthDowngradeSessionController',
+        'multifactor/'
+          => 'PhabricatorAuthNeedsMultiFactorController',
       ),
 
       '/oauth/(?P<provider>\w+)/login/'

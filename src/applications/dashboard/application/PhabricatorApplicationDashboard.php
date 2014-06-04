@@ -7,7 +7,7 @@ final class PhabricatorApplicationDashboard extends PhabricatorApplication {
   }
 
   public function getShortDescription() {
-    return pht('Such Data');
+    return pht('Create Custom Pages');
   }
 
   public function getIconName() {
@@ -48,7 +48,13 @@ final class PhabricatorApplicationDashboard extends PhabricatorApplication {
     );
   }
 
-  public function shouldAppearInLaunchView() {
+  public function isBeta() {
+    return true;
+  }
+
+  public function isLaunchable() {
+    // TODO: This is just concealing the application from launch views for
+    // now since it's not really beta yet.
     return false;
   }
 
