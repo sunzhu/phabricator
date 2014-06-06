@@ -2,50 +2,6 @@
 
 final class CeleritySpriteGenerator {
 
-  public function buildRemarkupSheet() {
-
-    $scales = array(
-      '1x'  => 1,
-      '2x'  => 2,
-    );
-    $sprites = array();
-
-    $template = id(new PhutilSprite())
-      ->setSourceSize(14, 14);
-
-    $remarkup_icons = $this->getDirectoryList('remarkup_1x');
-    foreach ($remarkup_icons as $icon) {
-      $prefix = 'remarkup_';
-
-      // Strip 'text_' from these file names.
-      $class_name = substr($icon, 5);
-
-      if ($class_name == 'fullscreen_off') {
-        $tcss = '.remarkup-control-fullscreen-mode .remarkup-assist-fullscreen';
-      } else {
-        $tcss = '.remarkup-assist-'.$class_name;
-      }
-
-      $sprite = id(clone $template)
-        ->setName('remarkup-assist-'.$icon)
-        ->setTargetCSS($tcss);
-
-      foreach ($scales as $scale_key => $scale) {
-        $path = $this->getPath($prefix.$scale_key.'/'.$icon.'.png');
-        $sprite->setSourceFile($path, $scale);
-      }
-      $sprites[] = $sprite;
-    }
-
-    $sheet = $this->buildSheet('remarkup', true);
-    $sheet->setScales($scales);
-    foreach ($sprites as $sprite) {
-      $sheet->addSprite($sprite);
-    }
-
-    return $sheet;
-  }
-
   public function buildMiniconsSheet() {
     $icons = $this->getDirectoryList('minicons_white_1x');
 
@@ -260,38 +216,6 @@ final class CeleritySpriteGenerator {
     }
 
     $sheet = $this->buildSheet('tokens', true);
-    $sheet->setScales($scales);
-    foreach ($sprites as $sprite) {
-      $sheet->addSprite($sprite);
-    }
-
-    return $sheet;
-  }
-
-  public function buildButtonBarSheet() {
-    $icons = $this->getDirectoryList('button_bar_1x');
-    $scales = array(
-      '1x' => 1,
-      '2x' => 2,
-    );
-    $template = id(new PhutilSprite())
-      ->setSourceSize(14, 14);
-
-    $sprites = array();
-    $prefix = 'button_bar_';
-    foreach ($icons as $icon) {
-      $sprite = id(clone $template)
-        ->setName('buttonbar-'.$icon)
-        ->setTargetCSS('.buttonbar-'.$icon);
-
-      foreach ($scales as $scale_key => $scale) {
-        $path = $this->getPath($prefix.$scale_key.'/'.$icon.'.png');
-        $sprite->setSourceFile($path, $scale);
-      }
-      $sprites[] = $sprite;
-    }
-
-    $sheet = $this->buildSheet('buttonbar', true);
     $sheet->setScales($scales);
     foreach ($sprites as $sprite) {
       $sheet->addSprite($sprite);
