@@ -3,6 +3,10 @@
 final class PhabricatorMacroSearchEngine
   extends PhabricatorApplicationSearchEngine {
 
+  public function getResultTypeDescription() {
+    return pht('Macros');
+  }
+
   public function getApplicationClassName() {
     return 'PhabricatorApplicationMacro';
   }
@@ -78,7 +82,7 @@ final class PhabricatorMacroSearchEngine
     $status = $saved_query->getParameter('status');
     $names = implode(', ', $saved_query->getParameter('names', array()));
     $like = $saved_query->getParameter('nameLike');
-    $color = $saved_query->getParameter('flagColor', "-1");
+    $color = $saved_query->getParameter('flagColor', '-1');
 
     $form
       ->appendChild(

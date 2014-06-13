@@ -3,6 +3,10 @@
 final class PholioMockSearchEngine
   extends PhabricatorApplicationSearchEngine {
 
+  public function getResultTypeDescription() {
+    return pht('Pholio Mocks');
+  }
+
   public function getApplicationClassName() {
     return 'PhabricatorApplicationPholio';
   }
@@ -41,9 +45,9 @@ final class PholioMockSearchEngine
       ->execute();
 
     $statuses = array(
-      ''=>pht('Any Status'),
-      'closed'=>pht('Closed'),
-      'open'=>pht('Open'));
+      '' => pht('Any Status'),
+      'closed' => pht('Closed'),
+      'open' => pht('Open'));
 
     $status = $saved_query->getParameter('statuses', array());
     $status = head($status);
