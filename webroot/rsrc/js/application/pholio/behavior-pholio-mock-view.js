@@ -591,11 +591,19 @@ JX.behavior('pholio-mock-view', function(config) {
 
     var buttons = [];
 
+    var classes = ['pholio-image-button'];
+
+    if (image.isViewable) {
+      classes.push('pholio-image-button-active');
+    } else {
+      classes.push('pholio-image-button-disabled');
+    }
+
     buttons.push(
       JX.$N(
         'div',
         {
-          className: 'pholio-image-button'
+          className: classes.join(' ')
         },
         JX.$N(
           image.isViewable ? 'a' : 'span',
@@ -606,22 +614,28 @@ JX.behavior('pholio-mock-view', function(config) {
           },
           JX.$H(config.fullIcon))));
 
-    // TODO: This should be a form which performs the download; for now, it
-    // just takes the user to the info page.
+    classes = ['pholio-image-button', 'pholio-image-button-active'];
+
     buttons.push(
       JX.$N(
-        'div',
+        'form',
         {
-          className: 'pholio-image-button'
+          className: classes.join(' '),
+          action: image.downloadURI,
+          method: 'POST',
+          sigil: 'download'
         },
         JX.$N(
-          'a',
+          'button',
           {
             href: image.downloadURI,
             className: 'pholio-image-button-link'
           },
           JX.$H(config.downloadIcon))));
 
+    if (image.title === '') {
+      image.title = 'Untitled Masterpiece';
+    }
     var title = JX.$N(
       'div',
       {className: 'pholio-image-title'},
@@ -642,12 +656,15 @@ JX.behavior('pholio-mock-view', function(config) {
     }
     info = JX.$N('div', {className: 'pholio-image-info'}, info);
 
-    var desc = JX.$N(
-      'div',
-      {className: 'pholio-image-description'},
-      JX.$H(image.descriptionMarkup));
-
-    return [buttons, info, desc];
+    if (image.descriptionMarkup === '') {
+      return [buttons, info];
+    } else {
+      var desc = JX.$N(
+        'div',
+        {className: 'pholio-image-description'},
+        JX.$H(image.descriptionMarkup));
+      return [buttons, info, desc];
+    }
   }
 
   function render_reticle(classes) {
