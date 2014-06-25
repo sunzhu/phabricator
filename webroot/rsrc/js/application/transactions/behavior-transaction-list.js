@@ -8,11 +8,7 @@
  *           phabricator-textareautils
  */
 
-JX.behavior('phabricator-transaction-list', function(config) {
-
-  var list = JX.$(config.listID);
-  var xaction_nodes = null;
-  var next_anchor = config.nextAnchor;
+JX.behavior('phabricator-transaction-list', function() {
 
   JX.Stratcom.listen(
     'click',
@@ -56,10 +52,10 @@ JX.behavior('phabricator-transaction-list', function(config) {
 
           var value = textarea.value;
           if (value.length) {
-            value += "\n\n";
+            value += '\n\n';
           }
           value += r.quoteText;
-          value += "\n\n";
+          value += '\n\n';
           textarea.value = value;
 
           JX.TextAreaUtils.setSelectionRange(
