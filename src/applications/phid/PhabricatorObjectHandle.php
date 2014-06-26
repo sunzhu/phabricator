@@ -11,6 +11,7 @@ final class PhabricatorObjectHandle
   private $title;
   private $imageURI;
   private $icon;
+  private $tagColor;
   private $timestamp;
   private $status = PhabricatorObjectHandleStatus::STATUS_OPEN;
   private $complete;
@@ -28,6 +29,26 @@ final class PhabricatorObjectHandle
       return $this->icon;
     }
     return $this->getTypeIcon();
+  }
+
+  public function setTagColor($color) {
+    static $colors;
+    if (!$colors) {
+      $colors = array_fuse(array_keys(PHUITagView::getShadeMap()));
+    }
+
+    if (isset($colors[$color])) {
+      $this->tagColor = $color;
+    }
+
+    return $this;
+  }
+
+  public function getTagColor() {
+    if ($this->tagColor) {
+      return $this->tagColor;
+    }
+    return 'blue';
   }
 
   public function getTypeIcon() {
@@ -253,6 +274,15 @@ final class PhabricatorObjectHandle
         'title' => $title,
       ),
       array($icon, $name));
+  }
+
+  public function renderTag() {
+    return id(new PHUITagView())
+      ->setType(PHUITagView::TYPE_OBJECT)
+      ->setShade($this->getTagColor())
+      ->setIcon($this->getIcon())
+      ->setHref($this->getURI())
+      ->setName($this->getLinkName());
   }
 
   public function getLinkName() {

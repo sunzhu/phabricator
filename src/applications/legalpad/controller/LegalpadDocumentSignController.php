@@ -14,10 +14,10 @@ final class LegalpadDocumentSignController extends LegalpadController {
 
   public function processRequest() {
     $request = $this->getRequest();
-    $user = $request->getUser();
+    $viewer = $request->getUser();
 
     $document = id(new LegalpadDocumentQuery())
-      ->setViewer($user)
+      ->setViewer($viewer)
       ->withIDs(array($this->id))
       ->needDocumentBodies(true)
       ->executeOne();
@@ -29,10 +29,10 @@ final class LegalpadDocumentSignController extends LegalpadController {
     $signer_phid = null;
     $signature = null;
     $signature_data = array();
-    if ($user->isLoggedIn()) {
-      $signer_phid = $user->getPHID();
+    if ($viewer->isLoggedIn()) {
+      $signer_phid = $viewer->getPHID();
       $signature_data = array(
-        'email' => $user->loadPrimaryEmailAddress());
+        'email' => $viewer->loadPrimaryEmailAddress());
     } else if ($request->isFormPost()) {
       $email = new PhutilEmailAddress($request->getStr('email'));
       $email_obj = id(new PhabricatorUserEmail())
@@ -41,7 +41,7 @@ final class LegalpadDocumentSignController extends LegalpadController {
         return $this->signInResponse();
       }
       $external_account = id(new PhabricatorExternalAccountQuery())
-        ->setViewer($user)
+        ->setViewer($viewer)
         ->withAccountTypes(array('email'))
         ->withAccountDomains(array($email->getDomainName()))
         ->withAccountIDs(array($email->getAddress()))
@@ -54,7 +54,7 @@ final class LegalpadDocumentSignController extends LegalpadController {
 
     if ($signer_phid) {
       $signature = id(new LegalpadDocumentSignatureQuery())
-        ->setViewer($user)
+        ->setViewer($viewer)
         ->withDocumentPHIDs(array($document->getPHID()))
         ->withSignerPHIDs(array($signer_phid))
         ->withDocumentVersions(array($document->getVersions()))
@@ -132,10 +132,10 @@ final class LegalpadDocumentSignController extends LegalpadController {
       }
 
       $verified = LegalpadDocumentSignature::UNVERIFIED;
-      if ($user->isLoggedIn() && $addr_obj) {
+      if ($viewer->isLoggedIn() && $addr_obj) {
         $email_obj = id(new PhabricatorUserEmail())
           ->loadOneWhere('address = %s', $addr_obj->getAddress());
-        if ($email_obj && $email_obj->getUserPHID() == $user->getPHID()) {
+        if ($email_obj && $email_obj->getUserPHID() == $viewer->getPHID()) {
           $verified = LegalpadDocumentSignature::VERIFIED;
         }
       }
@@ -165,7 +165,7 @@ final class LegalpadDocumentSignController extends LegalpadController {
 
     $document_body = $document->getDocumentBody();
     $engine = id(new PhabricatorMarkupEngine())
-      ->setViewer($user);
+      ->setViewer($viewer);
     $engine->addObject(
       $document_body,
       LegalpadDocumentBody::MARKUP_FIELD_TEXT);
@@ -173,25 +173,54 @@ final class LegalpadDocumentSignController extends LegalpadController {
 
     $title = $document_body->getTitle();
 
-    $header = id(new PHUIHeaderView())
-      ->setHeader($title);
+    $manage_uri = $this->getApplicationURI('view/'.$document->getID().'/');
 
-    $content = array(
-      $this->buildDocument(
-        $header,
-        $engine,
-        $document_body),
-      $this->buildSignatureForm(
-        $document_body,
-        $signature,
-        $has_signed,
-        $e_name,
-        $e_email,
-        $e_address_1,
-        $error_view));
+    $can_edit = PhabricatorPolicyFilter::hasCapability(
+      $viewer,
+      $document,
+      PhabricatorPolicyCapability::CAN_EDIT);
+
+    $header = id(new PHUIHeaderView())
+      ->setHeader($title)
+      ->addActionLink(
+        id(new PHUIButtonView())
+          ->setTag('a')
+          ->setIcon(
+            id(new PHUIIconView())
+              ->setIconFont('fa-pencil'))
+          ->setText(pht('Manage Document'))
+          ->setHref($manage_uri)
+          ->setDisabled(!$can_edit)
+          ->setWorkflow(!$can_edit));
+
+    $signature_form = $this->buildSignatureForm(
+      $document_body,
+      $signature,
+      $has_signed,
+      $e_name,
+      $e_email,
+      $e_address_1);
+
+    $content = $this->buildDocument(
+      $header,
+      $engine,
+      $document_body);
+
+    $content->appendChild(
+      array(
+        id(new PHUIHeaderView())->setHeader(pht('Agree and Sign Document')),
+        $error_view,
+        $signature_form,
+      ));
+
+    $crumbs = $this->buildApplicationCrumbs();
+    $crumbs->addTextCrumb($document->getMonogram());
 
     return $this->buildApplicationPage(
-      $content,
+      array(
+        $crumbs,
+        $content,
+      ),
       array(
         'title' => $title,
         'pageObjects' => array($document->getPHID()),
@@ -217,10 +246,9 @@ final class LegalpadDocumentSignController extends LegalpadController {
     $has_signed = false,
     $e_name = true,
     $e_email = true,
-    $e_address_1 = true,
-    $error_view = null) {
+    $e_address_1 = true) {
 
-    $user = $this->getRequest()->getUser();
+    $viewer = $this->getRequest()->getUser();
     if ($has_signed) {
       $instructions = pht('Thank you for signing and agreeing.');
     } else {
@@ -229,7 +257,7 @@ final class LegalpadDocumentSignController extends LegalpadController {
 
     $data = $signature->getSignatureData();
     $form = id(new AphrontFormView())
-      ->setUser($user)
+      ->setUser($viewer)
       ->appendChild(
         id(new AphrontFormTextControl())
         ->setLabel(pht('Name'))
@@ -274,15 +302,10 @@ final class LegalpadDocumentSignController extends LegalpadController {
       ->appendChild(
         id(new AphrontFormSubmitControl())
         ->setValue(pht('Sign and Agree'))
-        ->setDisabled($has_signed));
+        ->setDisabled($has_signed)
+        ->addCancelButton($this->getApplicationURI()));
 
-    $view = id(new PHUIObjectBoxView())
-      ->setHeaderText(pht('Sign and Agree'))
-      ->setForm($form);
-    if ($error_view) {
-      $view->setErrorView($error_view);
-    }
-    return $view;
+    return $form;
   }
 
   private function getVerifiedSignatureBlurb() {

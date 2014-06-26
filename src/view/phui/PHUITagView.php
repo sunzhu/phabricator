@@ -19,6 +19,7 @@ final class PHUITagView extends AphrontView {
   const COLOR_WHITE         = 'white';
   const COLOR_BLUEGREY      = 'bluegrey';
   const COLOR_CHECKERED     = 'checkered';
+  const COLOR_DISABLED      = 'disabled';
 
   const COLOR_OBJECT        = 'object';
   const COLOR_PERSON        = 'person';
@@ -113,7 +114,7 @@ final class PHUITagView extends AphrontView {
     $color = null;
     if ($this->shade) {
       $classes[] = 'phui-tag-shade';
-      $color = 'phui-tag-shade-'.$this->shade;
+      $classes[] = 'phui-tag-shade-'.$this->shade;;
     } else if ($this->backgroundColor) {
       $color = 'phui-tag-color-'.$this->backgroundColor;
     }
@@ -132,7 +133,7 @@ final class PHUITagView extends AphrontView {
 
     if ($this->icon) {
       $icon = id(new PHUIIconView())
-        ->setIconFont($this->icon, $this->shade);
+        ->setIconFont($this->icon);
       $classes[] = 'phui-tag-icon-view';
     } else {
       $icon = null;
@@ -210,20 +211,28 @@ final class PHUITagView extends AphrontView {
   }
 
   public static function getShades() {
+    return array_keys(self::getShadeMap());
+  }
+
+  public static function getShadeMap() {
     return array(
-      self::COLOR_RED,
-      self::COLOR_ORANGE,
-      self::COLOR_YELLOW,
-      self::COLOR_BLUE,
-      self::COLOR_INDIGO,
-      self::COLOR_VIOLET,
-      self::COLOR_GREEN,
-      self::COLOR_BLACK,
-      self::COLOR_GREY,
-      self::COLOR_BLUEGREY,
-      self::COLOR_CHECKERED,
+      self::COLOR_RED => pht('Red'),
+      self::COLOR_ORANGE => pht('Orange'),
+      self::COLOR_YELLOW => pht('Yellow'),
+      self::COLOR_BLUE => pht('Blue'),
+      self::COLOR_INDIGO => pht('Indigo'),
+      self::COLOR_VIOLET => pht('Violet'),
+      self::COLOR_GREEN => pht('Green'),
+      self::COLOR_GREY => pht('Grey'),
+      self::COLOR_CHECKERED => pht('Checkered'),
+      self::COLOR_DISABLED => pht('Disabled'),
     );
   }
+
+  public static function getShadeName($shade) {
+    return idx(self::getShadeMap(), $shade, $shade);
+  }
+
 
   public function setExternal($external) {
     $this->external = $external;

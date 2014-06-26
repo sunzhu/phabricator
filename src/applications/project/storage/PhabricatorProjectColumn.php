@@ -6,7 +6,7 @@ final class PhabricatorProjectColumn
   PhabricatorDestructableInterface {
 
   const STATUS_ACTIVE = 0;
-  const STATUS_DELETED = 1;
+  const STATUS_HIDDEN = 1;
 
   protected $name;
   protected $status;
@@ -45,18 +45,28 @@ final class PhabricatorProjectColumn
     return ($this->getSequence() == 0);
   }
 
-  public function isDeleted() {
-    return ($this->getStatus() == self::STATUS_DELETED);
+  public function isHidden() {
+    return ($this->getStatus() == self::STATUS_HIDDEN);
   }
 
   public function getDisplayName() {
+    $name = $this->getName();
+    if (strlen($name)) {
+      return $name;
+    }
+
     if ($this->isDefaultColumn()) {
       return pht('Backlog');
     }
-    return $this->getName();
+
+    return pht('Unnamed Column');
   }
 
   public function getHeaderColor() {
+    if ($this->isHidden()) {
+      return PHUIActionHeaderView::HEADER_LIGHTRED;
+    }
+
     if ($this->isDefaultColumn()) {
       return PHUIActionHeaderView::HEADER_DARK_GREY;
     }
