@@ -26,54 +26,22 @@ final class PhabricatorProjectEditIconController
       return new Aphront404Response();
     }
 
-    $view_uri = '/tag/'.$project->getPrimarySlug().'/';
     $edit_uri = $this->getApplicationURI('edit/'.$project->getID().'/');
-
-    if ($request->isFormPost()) {
-      $xactions = array();
-
-      $v_icon = $request->getStr('icon');
-      $v_icon_color = $request->getStr('color');
-
-      $type_icon = PhabricatorProjectTransaction::TYPE_ICON;
-      $xactions[] = id(new PhabricatorProjectTransaction())
-        ->setTransactionType($type_icon)
-        ->setNewValue($v_icon);
-
-      $type_icon_color = PhabricatorProjectTransaction::TYPE_COLOR;
-      $xactions[] = id(new PhabricatorProjectTransaction())
-        ->setTransactionType($type_icon_color)
-        ->setNewValue($v_icon_color);
-
-      $editor = id(new PhabricatorProjectTransactionEditor())
-        ->setActor($viewer)
-        ->setContentSourceFromRequest($request)
-        ->setContinueOnMissingFields(true)
-        ->setContinueOnNoEffect(true);
-
-      $editor->applyTransactions($project, $xactions);
-
-      return id(new AphrontReloadResponse())->setURI($edit_uri);
-    }
-
-    $shades = PHUITagView::getShadeMap();
-    $shades = array_select_keys(
-      $shades,
-      array(PhabricatorProject::DEFAULT_COLOR)) + $shades;
-    unset($shades[PHUITagView::COLOR_DISABLED]);
-
-    $color_form = id(new AphrontFormView())
-      ->appendChild(
-        id(new AphrontFormSelectControl())
-          ->setLabel(pht('Color'))
-          ->setName('color')
-          ->setValue($project->getColor())
-          ->setOptions($shades));
-
     require_celerity_resource('project-icon-css');
     Javelin::initBehavior('phabricator-tooltips');
 
     $project_icons = PhabricatorProjectIcon::getIconMap();
+
+    if ($request->isFormPost()) {
+      $v_icon = $request->getStr('icon');
+
+      return id(new AphrontAjaxResponse())->setContent(
+        array(
+          'value' => $v_icon,
+          'display' => PhabricatorProjectIcon::renderIconForChooser($v_icon),
+        ));
+    }
+
     $ii = 0;
     $buttons = array();
     foreach ($project_icons as $icon => $label) {
@@ -121,14 +89,9 @@ final class PhabricatorProjectEditIconController
       ),
       $buttons);
 
-    $color_form->appendChild(
-      id(new AphrontFormMarkupControl())
-        ->setLabel(pht('Icon'))
-        ->setValue($buttons));
-
     return $this->newDialog()
       ->setTitle(pht('Choose Project Icon'))
-      ->appendChild($color_form->buildLayoutView())
+      ->appendChild($buttons)
       ->addCancelButton($edit_uri);
   }
 }
