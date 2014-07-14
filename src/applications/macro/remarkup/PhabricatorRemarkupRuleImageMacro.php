@@ -1,10 +1,6 @@
 <?php
 
-/**
- * @group markup
- */
-final class PhabricatorRemarkupRuleImageMacro
-  extends PhutilRemarkupRule {
+final class PhabricatorRemarkupRuleImageMacro extends PhutilRemarkupRule {
 
   private $macros;
 
@@ -147,7 +143,7 @@ final class PhabricatorRemarkupRuleImageMacro
           ));
       }
 
-      $result = phutil_tag(
+      $result = $this->newTag(
         'img',
         array(
           'id'    => $id,

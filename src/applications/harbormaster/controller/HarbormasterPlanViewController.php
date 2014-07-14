@@ -106,7 +106,7 @@ final class HarbormasterPlanViewController
       try {
         $implementation = $step->getStepImplementation();
       } catch (Exception $ex) {
-        // We can't initialize the implementation.  This might be because
+        // We can't initialize the implementation. This might be because
         // it's been renamed or no longer exists.
         $item = id(new PHUIObjectItemView())
           ->setObjectName(pht('Step %d', $i++))
@@ -129,7 +129,7 @@ final class HarbormasterPlanViewController
       }
       $item = id(new PHUIObjectItemView())
         ->setObjectName('Step '.$i++)
-        ->setHeader($implementation->getName());
+        ->setHeader($step->getName());
 
       $item->addAttribute($implementation->getDescription());
 

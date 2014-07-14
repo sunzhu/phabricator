@@ -1,8 +1,5 @@
 <?php
 
-/**
- * @group conduit
- */
 final class ConduitAPI_conduit_connect_Method extends ConduitAPIMethod {
 
   public function shouldRequireAuthentication() {
@@ -55,7 +52,6 @@ final class ConduitAPI_conduit_connect_Method extends ConduitAPIMethod {
   }
 
   protected function execute(ConduitAPIRequest $request) {
-
     $client = $request->getValue('client');
     $client_version = (int)$request->getValue('clientVersion');
     $client_description = (string)$request->getValue('clientDescription');
@@ -109,9 +105,7 @@ final class ConduitAPI_conduit_connect_Method extends ConduitAPIMethod {
     $token = $request->getValue('authToken');
     $signature = $request->getValue('authSignature');
 
-    $user = id(new PhabricatorUser())->loadOneWhere(
-      'username = %s',
-      $username);
+    $user = id(new PhabricatorUser())->loadOneWhere('username = %s', $username);
     if (!$user) {
       throw new ConduitException('ERR-INVALID-USER');
     }
@@ -131,7 +125,7 @@ final class ConduitAPI_conduit_connect_Method extends ConduitAPIMethod {
               'timestamp must differ from the server time by no more than '.
               '%s seconds. Your client or server clock may not be set '.
               'correctly.',
-              phabricator_format_relative_time($threshold),
+              phutil_format_relative_time($threshold),
               $token,
               date('r', $token),
               $now,

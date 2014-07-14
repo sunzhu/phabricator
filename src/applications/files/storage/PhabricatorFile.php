@@ -1,8 +1,5 @@
 <?php
 
-/**
- * @group file
- */
 final class PhabricatorFile extends PhabricatorFileDAO
   implements
     PhabricatorTokenReceiverInterface,
@@ -111,7 +108,7 @@ final class PhabricatorFile extends PhabricatorFileDAO
       return;
     }
 
-    $limit = phabricator_parse_bytes($limit);
+    $limit = phutil_parse_bytes($limit);
     if ($size > $limit) {
       throw new PhabricatorFileUploadException(-1000);
     }
@@ -157,7 +154,6 @@ final class PhabricatorFile extends PhabricatorFileDAO
   }
 
   public static function newFileFromContentHash($hash, $params) {
-
     // Check to see if a file with same contentHash exist
     $file = id(new PhabricatorFile())->loadOneWhere(
       'contentHash = %s LIMIT 1', $hash);
@@ -413,7 +409,6 @@ final class PhabricatorFile extends PhabricatorFileDAO
   }
 
   public function delete() {
-
     // We want to delete all the rows which mark this file as the transformation
     // of some other file (since we're getting rid of it). We also delete all
     // the transformations of this file, so that a user who deletes an image
@@ -587,7 +582,6 @@ final class PhabricatorFile extends PhabricatorFileDAO
   }
 
   public function isTransformableImage() {
-
     // NOTE: The way the 'gd' extension works in PHP is that you can install it
     // with support for only some file types, so it might be able to handle
     // PNG but not JPEG. Try to generate thumbnails for whatever we can. Setup
