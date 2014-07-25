@@ -4,7 +4,7 @@ abstract class PhabricatorApplicationTransaction
   extends PhabricatorLiskDAO
   implements
     PhabricatorPolicyInterface,
-    PhabricatorDestructableInterface {
+    PhabricatorDestructibleInterface {
 
   const TARGET_TEXT = 'text';
   const TARGET_HTML = 'html';
@@ -76,7 +76,7 @@ abstract class PhabricatorApplicationTransaction
   }
 
   public function getApplicationTransactionCommentObject() {
-    throw new Exception('Not implemented!');
+    throw new PhutilMethodNotImplementedException();
   }
 
   public function getApplicationTransactionViewObject() {
@@ -93,7 +93,7 @@ abstract class PhabricatorApplicationTransaction
   }
 
   public function generatePHID() {
-    $type = PhabricatorApplicationTransactionPHIDTypeTransaction::TYPECONST;
+    $type = PhabricatorApplicationTransactionTransactionPHIDType::TYPECONST;
     $subtype = $this->getApplicationTransactionType();
 
     return PhabricatorPHID::generateNewPHID($type, $subtype);
@@ -1026,7 +1026,7 @@ abstract class PhabricatorApplicationTransaction
   }
 
 
-/* -(  PhabricatorDestructableInterface  )----------------------------------- */
+/* -(  PhabricatorDestructibleInterface  )----------------------------------- */
 
 
   public function destroyObjectPermanently(

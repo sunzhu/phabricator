@@ -6,7 +6,7 @@ final class PhrictionDocument extends PhrictionDAO
     PhabricatorSubscribableInterface,
     PhabricatorFlaggableInterface,
     PhabricatorTokenReceiverInterface,
-    PhabricatorDestructableInterface {
+    PhabricatorDestructibleInterface {
 
   protected $slug;
   protected $depth;
@@ -29,7 +29,7 @@ final class PhrictionDocument extends PhrictionDAO
 
   public function generatePHID() {
     return PhabricatorPHID::generateNewPHID(
-      PhrictionPHIDTypeDocument::TYPECONST);
+      PhrictionDocumentPHIDType::TYPECONST);
   }
 
   public static function getSlugURI($slug, $type = 'document') {
@@ -183,7 +183,7 @@ final class PhrictionDocument extends PhrictionDAO
   }
 
 
-/* -(  PhabricatorDestructableInterface  )----------------------------------- */
+/* -(  PhabricatorDestructibleInterface  )----------------------------------- */
 
 
   public function destroyObjectPermanently(

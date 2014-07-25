@@ -8,7 +8,7 @@ final class ManiphestTask extends ManiphestDAO
     PhabricatorFlaggableInterface,
     PhrequentTrackableInterface,
     PhabricatorCustomFieldInterface,
-    PhabricatorDestructableInterface,
+    PhabricatorDestructibleInterface,
     PhabricatorApplicationTransactionInterface {
 
   const MARKUP_FIELD_DESCRIPTION = 'markup:desc';
@@ -42,11 +42,11 @@ final class ManiphestTask extends ManiphestDAO
   public static function initializeNewTask(PhabricatorUser $actor) {
     $app = id(new PhabricatorApplicationQuery())
       ->setViewer($actor)
-      ->withClasses(array('PhabricatorApplicationManiphest'))
+      ->withClasses(array('PhabricatorManiphestApplication'))
       ->executeOne();
 
-    $view_policy = $app->getPolicy(ManiphestCapabilityDefaultView::CAPABILITY);
-    $edit_policy = $app->getPolicy(ManiphestCapabilityDefaultEdit::CAPABILITY);
+    $view_policy = $app->getPolicy(ManiphestDefaultViewCapability::CAPABILITY);
+    $edit_policy = $app->getPolicy(ManiphestDefaultEditCapability::CAPABILITY);
 
     return id(new ManiphestTask())
       ->setStatus(ManiphestTaskStatus::getDefaultStatus())
@@ -85,7 +85,7 @@ final class ManiphestTask extends ManiphestDAO
   }
 
   public function generatePHID() {
-    return PhabricatorPHID::generateNewPHID(ManiphestPHIDTypeTask::TYPECONST);
+    return PhabricatorPHID::generateNewPHID(ManiphestTaskPHIDType::TYPECONST);
   }
 
   public function getCCPHIDs() {
@@ -231,7 +231,6 @@ final class ManiphestTask extends ManiphestDAO
   }
 
   public function hasAutomaticCapability($capability, PhabricatorUser $user) {
-
     // The owner of a task can always view and edit it.
     $owner_phid = $this->getOwnerPHID();
     if ($owner_phid) {
@@ -245,8 +244,7 @@ final class ManiphestTask extends ManiphestDAO
   }
 
   public function describeAutomaticCapability($capability) {
-    return pht(
-      'The owner of a task can always view and edit it.');
+    return pht('The owner of a task can always view and edit it.');
   }
 
 
@@ -285,7 +283,7 @@ final class ManiphestTask extends ManiphestDAO
   }
 
 
-/* -(  PhabricatorDestructableInterface  )----------------------------------- */
+/* -(  PhabricatorDestructibleInterface  )----------------------------------- */
 
 
   public function destroyObjectPermanently(

@@ -323,10 +323,9 @@ final class DiffusionCommitController extends DiffusionController {
         $visible_changesets = $changesets;
       } else {
         $visible_changesets = array();
-        $inlines = id(new PhabricatorAuditInlineComment())->loadAllWhere(
-          'commitPHID = %s AND (auditCommentID IS NOT NULL OR authorPHID = %s)',
-          $commit->getPHID(),
-          $user->getPHID());
+        $inlines = PhabricatorAuditInlineComment::loadDraftAndPublishedComments(
+          $user,
+          $commit->getPHID());
         $path_ids = mpull($inlines, null, 'getPathID');
         foreach ($changesets as $key => $changeset) {
           if (array_key_exists($changeset->getID(), $path_ids)) {
@@ -644,12 +643,12 @@ final class DiffusionCommitController extends DiffusionController {
 
   private function buildComments(PhabricatorRepositoryCommit $commit) {
     $user = $this->getRequest()->getUser();
-    $comments = id(new PhabricatorAuditComment())->loadAllWhere(
-      'targetPHID = %s ORDER BY dateCreated ASC',
+    $comments = PhabricatorAuditComment::loadComments(
+      $user,
       $commit->getPHID());
 
-    $inlines = id(new PhabricatorAuditInlineComment())->loadAllWhere(
-      'commitPHID = %s AND auditCommentID IS NOT NULL',
+    $inlines = PhabricatorAuditInlineComment::loadPublishedComments(
+      $user,
       $commit->getPHID());
 
     $path_ids = mpull($inlines, 'getPathID');
@@ -999,7 +998,7 @@ final class DiffusionCommitController extends DiffusionController {
     require_celerity_resource('phabricator-object-selector-css');
     require_celerity_resource('javelin-behavior-phabricator-object-selector');
 
-    $maniphest = 'PhabricatorApplicationManiphest';
+    $maniphest = 'PhabricatorManiphestApplication';
     if (PhabricatorApplication::isClassInstalled($maniphest)) {
       $action = id(new PhabricatorActionView())
         ->setName(pht('Edit Maniphest Tasks'))
@@ -1175,6 +1174,5 @@ final class DiffusionCommitController extends DiffusionController {
 
     return $parser->processCorpus($corpus);
   }
-
 
 }

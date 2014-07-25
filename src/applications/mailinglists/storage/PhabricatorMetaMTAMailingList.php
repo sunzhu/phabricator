@@ -3,7 +3,7 @@
 final class PhabricatorMetaMTAMailingList extends PhabricatorMetaMTADAO
   implements
     PhabricatorPolicyInterface,
-    PhabricatorDestructableInterface {
+    PhabricatorDestructibleInterface {
 
   protected $name;
   protected $email;
@@ -11,7 +11,7 @@ final class PhabricatorMetaMTAMailingList extends PhabricatorMetaMTADAO
 
   public function generatePHID() {
     return PhabricatorPHID::generateNewPHID(
-      PhabricatorMailingListPHIDTypeList::TYPECONST);
+      PhabricatorMailingListListPHIDType::TYPECONST);
   }
 
   public function getConfiguration() {
@@ -43,7 +43,7 @@ final class PhabricatorMetaMTAMailingList extends PhabricatorMetaMTADAO
   }
 
 
-/* -(  PhabricatorDestructableInterface  )----------------------------------- */
+/* -(  PhabricatorDestructibleInterface  )----------------------------------- */
 
 
   public function destroyObjectPermanently(

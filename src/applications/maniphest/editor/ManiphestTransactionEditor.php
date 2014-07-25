@@ -60,7 +60,6 @@ final class ManiphestTransactionEditor
       case ManiphestTransaction::TYPE_SUBPRIORITY:
         return $object->getSubpriority();
     }
-
   }
 
   protected function getCustomTransactionNewValue(
@@ -83,7 +82,6 @@ final class ManiphestTransactionEditor
         return $xaction->getNewValue();
     }
   }
-
 
   protected function transactionHasEffect(
     PhabricatorLiskDAO $object,
@@ -156,7 +154,6 @@ final class ManiphestTransactionEditor
         // these do external (edge) updates
         return;
     }
-
   }
 
   protected function expandTransaction(
@@ -285,7 +282,6 @@ final class ManiphestTransactionEditor
 
     return $xactions;
   }
-
 
   protected function shouldSendMail(
     PhabricatorLiskDAO $object,
@@ -436,15 +432,15 @@ final class ManiphestTransactionEditor
 
     $app_capability_map = array(
       ManiphestTransaction::TYPE_PRIORITY =>
-        ManiphestCapabilityEditPriority::CAPABILITY,
+        ManiphestEditPriorityCapability::CAPABILITY,
       ManiphestTransaction::TYPE_STATUS =>
-        ManiphestCapabilityEditStatus::CAPABILITY,
+        ManiphestEditStatusCapability::CAPABILITY,
       ManiphestTransaction::TYPE_OWNER =>
-        ManiphestCapabilityEditAssign::CAPABILITY,
+        ManiphestEditAssignCapability::CAPABILITY,
       PhabricatorTransactions::TYPE_EDIT_POLICY =>
-        ManiphestCapabilityEditPolicies::CAPABILITY,
+        ManiphestEditPoliciesCapability::CAPABILITY,
       PhabricatorTransactions::TYPE_VIEW_POLICY =>
-        ManiphestCapabilityEditPolicies::CAPABILITY,
+        ManiphestEditPoliciesCapability::CAPABILITY,
     );
 
 
@@ -454,7 +450,7 @@ final class ManiphestTransactionEditor
     if ($transaction_type == PhabricatorTransactions::TYPE_EDGE) {
       switch ($xaction->getMetadataValue('edge:type')) {
         case PhabricatorProjectObjectHasProjectEdgeType::EDGECONST:
-          $app_capability = ManiphestCapabilityEditProjects::CAPABILITY;
+          $app_capability = ManiphestEditProjectsCapability::CAPABILITY;
           break;
       }
     } else {
@@ -464,7 +460,7 @@ final class ManiphestTransactionEditor
     if ($app_capability) {
       $app = id(new PhabricatorApplicationQuery())
         ->setViewer($this->getActor())
-        ->withClasses(array('PhabricatorApplicationManiphest'))
+        ->withClasses(array('PhabricatorManiphestApplication'))
         ->executeOne();
       PhabricatorPolicyFilter::requireCapability(
         $this->getActor(),
@@ -492,7 +488,6 @@ final class ManiphestTransactionEditor
   }
 
   private function getNextSubpriority($pri, $sub, $dir = '>') {
-
     switch ($dir) {
       case '>':
         $order = 'ASC';

@@ -13,7 +13,6 @@ final class ManiphestTaskDetailController extends ManiphestController {
   }
 
   public function processRequest() {
-
     $request = $this->getRequest();
     $user = $request->getUser();
 
@@ -162,13 +161,13 @@ final class ManiphestTaskDetailController extends ManiphestController {
 
     $requires = array(
       ManiphestTransaction::TYPE_OWNER =>
-        ManiphestCapabilityEditAssign::CAPABILITY,
+        ManiphestEditAssignCapability::CAPABILITY,
       ManiphestTransaction::TYPE_PRIORITY =>
-        ManiphestCapabilityEditPriority::CAPABILITY,
+        ManiphestEditPriorityCapability::CAPABILITY,
       ManiphestTransaction::TYPE_PROJECTS =>
-        ManiphestCapabilityEditProjects::CAPABILITY,
+        ManiphestEditProjectsCapability::CAPABILITY,
       ManiphestTransaction::TYPE_STATUS =>
-        ManiphestCapabilityEditStatus::CAPABILITY,
+        ManiphestEditStatusCapability::CAPABILITY,
     );
 
     foreach ($transaction_types as $type => $name) {
@@ -647,7 +646,7 @@ final class ManiphestTaskDetailController extends ManiphestController {
       $attached = array();
     }
 
-    $file_infos = idx($attached, PhabricatorFilePHIDTypeFile::TYPECONST);
+    $file_infos = idx($attached, PhabricatorFileFilePHIDType::TYPECONST);
     if ($file_infos) {
       $file_phids = array_keys($file_infos);
 

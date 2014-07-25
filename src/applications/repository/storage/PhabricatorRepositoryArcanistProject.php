@@ -2,8 +2,9 @@
 
 final class PhabricatorRepositoryArcanistProject
   extends PhabricatorRepositoryDAO
-  implements PhabricatorPolicyInterface,
-  PhabricatorDestructableInterface {
+  implements
+    PhabricatorPolicyInterface,
+    PhabricatorDestructibleInterface {
 
   protected $name;
   protected $repositoryID;
@@ -26,7 +27,7 @@ final class PhabricatorRepositoryArcanistProject
 
   public function generatePHID() {
     return PhabricatorPHID::generateNewPHID(
-      PhabricatorRepositoryPHIDTypeArcanistProject::TYPECONST);
+      PhabricatorRepositoryArcanistProjectPHIDType::TYPECONST);
   }
 
   // TODO: Remove. Also, T603.
@@ -89,7 +90,7 @@ final class PhabricatorRepositoryArcanistProject
   }
 
 
-/* -(  PhabricatorDestructableInterface  )----------------------------------- */
+/* -(  PhabricatorDestructibleInterface  )----------------------------------- */
 
   public function destroyObjectPermanently(
     PhabricatorDestructionEngine $engine) {
