@@ -9,6 +9,7 @@ final class PhabricatorProjectColumnPositionQuery
   private $columns;
 
   private $needColumns;
+  private $skipImplicitCreate;
 
   public function withIDs(array $ids) {
     $this->ids = $ids;
@@ -43,6 +44,21 @@ final class PhabricatorProjectColumnPositionQuery
 
   public function needColumns($need_columns) {
     $this->needColumns = true;
+    return $this;
+  }
+
+
+  /**
+   * Skip implicit creation of column positions which are implied but do not
+   * yet exist.
+   *
+   * This is primarily useful internally.
+   *
+   * @param bool  True to skip implicit creation of column positions.
+   * @return this
+   */
+  public function setSkipImplicitCreate($skip) {
+    $this->skipImplicitCreate = $skip;
     return $this;
   }
 
@@ -93,7 +109,7 @@ final class PhabricatorProjectColumnPositionQuery
     // column and put it in the default column.
 
     $must_type_filter = false;
-    if ($this->columns) {
+    if ($this->columns && !$this->skipImplicitCreate) {
       $default_map = array();
       foreach ($this->columns as $column) {
         if ($column->isDefaultColumn()) {
@@ -178,12 +194,44 @@ final class PhabricatorProjectColumnPositionQuery
 
     $positions = $table->loadAllFromArray($data);
 
+    // Find the implied positions which don't exist yet. If there are any,
+    // we're going to create them.
+    $create = array();
     foreach ($positions as $position) {
       if ($position->getColumnPHID() === null) {
-        $position->makeEphemeral();
         $column_phid = idx($default_map, $position->getBoardPHID());
         $position->setColumnPHID($column_phid);
+
+        $create[] = $position;
       }
+    }
+
+    if ($create) {
+      // If we're adding several objects to a column, insert the column
+      // position objects in object ID order. This means that newly added
+      // objects float to the top, and when a group of newly added objects
+      // float up at the same time, the most recently created ones end up
+      // highest in the list.
+
+      $objects = id(new PhabricatorObjectQuery())
+        ->setViewer(PhabricatorUser::getOmnipotentUser())
+        ->withPHIDs(mpull($create, 'getObjectPHID'))
+        ->execute();
+      $objects = mpull($objects, null, 'getPHID');
+      $objects = msort($objects, 'getID');
+
+      $create = mgroup($create, 'getObjectPHID');
+      $create = array_select_keys($create, array_keys($objects)) + $create;
+
+      $unguarded = AphrontWriteGuard::beginScopedUnguardedWrites();
+
+        foreach ($create as $object_phid => $create_positions) {
+          foreach ($create_positions as $create_position) {
+            $create_position->save();
+          }
+        }
+
+      unset($unguarded);
     }
 
     return $positions;

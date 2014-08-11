@@ -11,7 +11,9 @@ final class ManiphestTaskEditController extends ManiphestController {
   public function processRequest() {
     $request = $this->getRequest();
     $user = $request->getUser();
+
     $response_type = $request->getStr('responseType', 'task');
+    $order = $request->getStr('order', PhabricatorProjectColumn::DEFAULT_ORDER);
 
     $can_edit_assign = $this->hasApplicationCapability(
       ManiphestEditAssignCapability::CAPABILITY);
@@ -385,10 +387,23 @@ final class ManiphestTaskEditController extends ManiphestController {
                 ->withPHIDs($task_phids)
                 ->execute();
 
-              $sort_map = mpull(
-                $column_tasks,
-                'getPrioritySortVector',
-                'getPHID');
+              if ($order == PhabricatorProjectColumn::ORDER_NATURAL) {
+                // TODO: This is a little bit awkward, because PHP and JS use
+                // slightly different sort order parameters to achieve the same
+                // effect. It would be unify this a bit at some point.
+                $sort_map = array();
+                foreach ($positions as $position) {
+                  $sort_map[$position->getObjectPHID()] = array(
+                    -$position->getSequence(),
+                    $position->getID(),
+                  );
+                }
+              } else {
+                $sort_map = mpull(
+                  $column_tasks,
+                  'getPrioritySortVector',
+                  'getPHID');
+              }
 
               $data = array(
                 'sortMap' => $sort_map,
@@ -531,6 +546,7 @@ final class ManiphestTaskEditController extends ManiphestController {
       ->setUser($user)
       ->addHiddenInput('template', $template_id)
       ->addHiddenInput('responseType', $response_type)
+      ->addHiddenInput('order', $order)
       ->addHiddenInput('columnPHID', $request->getStr('columnPHID'));
 
     if ($parent_task) {
