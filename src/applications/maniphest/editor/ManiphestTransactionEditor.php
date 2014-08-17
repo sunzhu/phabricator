@@ -5,6 +5,14 @@ final class ManiphestTransactionEditor
 
   private $heraldEmailPHIDs = array();
 
+  public function getEditorApplicationClass() {
+    return 'PhabricatorManiphestApplication';
+  }
+
+  public function getEditorObjectsDescription() {
+    return pht('Maniphest Tasks');
+  }
+
   public function getTransactionTypes() {
     $types = parent::getTransactionTypes();
 
@@ -373,13 +381,9 @@ final class ManiphestTransactionEditor
             ->setOldValue(array($object->getPHID() => $old))
             ->setNewValue(array($object->getPHID() => $new));
 
-          // TODO: We should avoid notifiying users about these indirect
-          // changes if they are getting a notification about the current
-          // change, so you don't get a pile of extra notifications if you are
-          // subscribed to this task.
-
           id(new ManiphestTransactionEditor())
             ->setActor($this->getActor())
+            ->setActingAsPHID($this->getActingAsPHID())
             ->setContentSource($this->getContentSource())
             ->setContinueOnNoEffect(true)
             ->setContinueOnMissingFields(true)
@@ -410,7 +414,7 @@ final class ManiphestTransactionEditor
   protected function getMailTo(PhabricatorLiskDAO $object) {
     return array(
       $object->getOwnerPHID(),
-      $this->requireActor()->getPHID(),
+      $this->getActingAsPHID(),
     );
   }
 
@@ -430,6 +434,29 @@ final class ManiphestTransactionEditor
     }
 
     return $phids;
+  }
+
+  public function getMailTagsMap() {
+    return array(
+      ManiphestTransaction::MAILTAG_STATUS =>
+        pht("A task's status changes."),
+      ManiphestTransaction::MAILTAG_OWNER =>
+        pht("A task's owner changes."),
+      ManiphestTransaction::MAILTAG_PRIORITY =>
+        pht("A task's priority changes."),
+      ManiphestTransaction::MAILTAG_CC =>
+        pht("A task's subscribers change."),
+      ManiphestTransaction::MAILTAG_PROJECTS =>
+        pht("A task's associated projects change."),
+      ManiphestTransaction::MAILTAG_UNBLOCK =>
+        pht('One of the tasks a task is blocked by changes status.'),
+      ManiphestTransaction::MAILTAG_COLUMN =>
+        pht('A task is moved between columns on a workboard.'),
+      ManiphestTransaction::MAILTAG_COMMENT =>
+        pht('Someone comments on a task.'),
+      ManiphestTransaction::MAILTAG_OTHER =>
+        pht('Other task activity not listed above occurs.'),
+    );
   }
 
   protected function buildReplyHandler(PhabricatorLiskDAO $object) {
