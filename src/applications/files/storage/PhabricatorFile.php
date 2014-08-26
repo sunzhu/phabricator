@@ -21,7 +21,8 @@ final class PhabricatorFile extends PhabricatorFileDAO
     PhabricatorTokenReceiverInterface,
     PhabricatorSubscribableInterface,
     PhabricatorFlaggableInterface,
-    PhabricatorPolicyInterface {
+    PhabricatorPolicyInterface,
+    PhabricatorDestructibleInterface {
 
   const ONETIME_TEMPORARY_TOKEN_TYPE = 'file:onetime';
   const STORAGE_FORMAT_RAW  = 'raw';
@@ -317,13 +318,17 @@ final class PhabricatorFile extends PhabricatorFileDAO
       $params);
 
     $old_engine = $this->instantiateStorageEngine();
+    $old_identifier = $this->getStorageEngine();
     $old_handle = $this->getStorageHandle();
 
     $this->setStorageEngine($new_identifier);
     $this->setStorageHandle($new_handle);
     $this->save();
 
-    $old_engine->deleteFile($old_handle);
+    $this->deleteFileDataIfUnused(
+      $old_engine,
+      $old_identifier,
+      $old_handle);
 
     return $this;
   }
@@ -437,29 +442,42 @@ final class PhabricatorFile extends PhabricatorFileDAO
       $ret = parent::delete();
     $this->saveTransaction();
 
-    // Check to see if other files are using storage
-    $other_file = id(new PhabricatorFile())->loadAllWhere(
-      'storageEngine = %s AND storageHandle = %s AND
-      storageFormat = %s AND id != %d LIMIT 1',
+    $this->deleteFileDataIfUnused(
+      $this->instantiateStorageEngine(),
       $this->getStorageEngine(),
-      $this->getStorageHandle(),
-      $this->getStorageFormat(),
-      $this->getID());
-
-    // If this is the only file using the storage, delete storage
-    if (!$other_file) {
-      $engine = $this->instantiateStorageEngine();
-      try {
-        $engine->deleteFile($this->getStorageHandle());
-      } catch (Exception $ex) {
-        // In the worst case, we're leaving some data stranded in a storage
-        // engine, which is fine.
-        phlog($ex);
-      }
-    }
+      $this->getStorageHandle());
 
     return $ret;
   }
+
+
+  /**
+   * Destroy stored file data if there are no remaining files which reference
+   * it.
+   */
+  public function deleteFileDataIfUnused(
+    PhabricatorFileStorageEngine $engine,
+    $engine_identifier,
+    $handle) {
+
+    // Check to see if any files are using storage.
+    $usage = id(new PhabricatorFile())->loadAllWhere(
+      'storageEngine = %s AND storageHandle = %s LIMIT 1',
+      $engine_identifier,
+      $handle);
+
+    // If there are no files using the storage, destroy the actual storage.
+    if (!$usage) {
+      try {
+        $engine->deleteFile($handle);
+      } catch (Exception $ex) {
+        // In the worst case, we're leaving some data stranded in a storage
+        // engine, which is not a big deal.
+        phlog($ex);
+      }
+    }
+  }
+
 
   public static function hashFileContent($data) {
     return sha1($data);
@@ -494,7 +512,7 @@ final class PhabricatorFile extends PhabricatorFileDAO
   }
 
   public function getInfoURI() {
-    return '/file/info/'.$this->getPHID().'/';
+    return '/'.$this->getMonogram();
   }
 
   public function getBestURI() {
@@ -626,7 +644,7 @@ final class PhabricatorFile extends PhabricatorFileDAO
     return $supported;
   }
 
-  protected function instantiateStorageEngine() {
+  public function instantiateStorageEngine() {
     return self::buildEngine($this->getStorageEngine());
   }
 
@@ -966,6 +984,25 @@ final class PhabricatorFile extends PhabricatorFileDAO
     return $this;
   }
 
+  public function getRedirectResponse() {
+    $uri = $this->getBestURI();
+
+    // TODO: This is a bit iffy. Sometimes, getBestURI() returns a CDN URI
+    // (if the file is a viewable image) and sometimes a local URI (if not).
+    // For now, just detect which one we got and configure the response
+    // appropriately. In the long run, if this endpoint is served from a CDN
+    // domain, we can't issue a local redirect to an info URI (which is not
+    // present on the CDN domain). We probably never actually issue local
+    // redirects here anyway, since we only ever transform viewable images
+    // right now.
+
+    $is_external = strlen(id(new PhutilURI($uri))->getDomain());
+
+    return id(new AphrontRedirectResponse())
+      ->setIsExternal($is_external)
+      ->setURI($uri);
+  }
+
 
 /* -(  PhabricatorPolicyInterface Implementation  )-------------------------- */
 
@@ -1044,5 +1081,16 @@ final class PhabricatorFile extends PhabricatorFileDAO
     );
   }
 
+
+/* -(  PhabricatorDestructibleInterface  )----------------------------------- */
+
+
+  public function destroyObjectPermanently(
+    PhabricatorDestructionEngine $engine) {
+
+    $this->openTransaction();
+      $this->delete();
+    $this->saveTransaction();
+  }
 
 }
