@@ -38,7 +38,10 @@ final class PhabricatorRepositoryMercurialCommitChangeParserWorker
       $path = '/'.$path;
       $flags = $path_info['flags'];
       $change_target = $path_info['from'] ? '/'.$path_info['from'] : null;
-
+	if(!phutil_is_utf8_with_only_bmp_characters($change_target))
+        {
+            $change_target=iconv("GBK","UTF-8",$change_target);
+        }
       $changes[$path] = array(
         'path'            => $path,
         'isDirect'        => true,
