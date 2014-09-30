@@ -107,6 +107,17 @@ abstract class PhabricatorApplicationTransaction
         'newValue' => self::SERIALIZATION_JSON,
         'metadata' => self::SERIALIZATION_JSON,
       ),
+      self::CONFIG_COLUMN_SCHEMA => array(
+        'commentPHID' => 'phid?',
+        'commentVersion' => 'uint32',
+        'contentSource' => 'text',
+        'transactionType' => 'text32',
+      ),
+      self::CONFIG_KEY_SCHEMA => array(
+        'key_object' => array(
+          'columns' => array('objectPHID'),
+        ),
+      ),
     ) + parent::getConfiguration();
   }
 
@@ -445,6 +456,14 @@ abstract class PhabricatorApplicationTransaction
             return true;
             break;
           case PhabricatorObjectMentionedByObject::EDGECONST:
+            $new = ipull($this->getNewValue(), 'dst');
+            $old = ipull($this->getOldValue(), 'dst');
+            $add = array_diff($new, $old);
+            $add_value = reset($add);
+            $add_handle = $this->getHandle($add_value);
+            if ($add_handle->getPolicyFiltered()) {
+              return true;
+            }
             return false;
             break;
           default:
