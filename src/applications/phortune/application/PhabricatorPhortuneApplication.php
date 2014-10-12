@@ -48,6 +48,9 @@ final class PhabricatorPhortuneApplication extends PhabricatorApplication {
         'cart/(?P<id>\d+)/' => array(
           '' => 'PhortuneCartViewController',
           'checkout/' => 'PhortuneCartCheckoutController',
+          '(?P<action>cancel|refund)/' => 'PhortuneCartCancelController',
+          'update/' => 'PhortuneCartUpdateController',
+          'accept/' => 'PhortuneCartAcceptController',
         ),
         'account/' => array(
           '' => 'PhortuneAccountListController',
@@ -58,11 +61,28 @@ final class PhabricatorPhortuneApplication extends PhabricatorApplication {
           'view/(?P<id>\d+)/' => 'PhortuneProductViewController',
           'edit/(?:(?P<id>\d+)/)?' => 'PhortuneProductEditController',
         ),
-        'purchase/(?P<id>\d+)/' => array(
-          '' => 'PhortunePurchaseViewController',
+        'provider/' => array(
+          'edit/(?:(?P<id>\d+)/)?' => 'PhortuneProviderEditController',
+          'disable/(?P<id>\d+)/' => 'PhortuneProviderDisableController',
+          '(?P<id>\d+)/(?P<action>[^/]+)/'
+            => 'PhortuneProviderActionController',
         ),
-        'provider/(?P<digest>[^/]+)/(?P<action>[^/]+)/'
-          => 'PhortuneProviderController',
+        'merchant/' => array(
+          '(?:query/(?P<queryKey>[^/]+)/)?' => 'PhortuneMerchantListController',
+          'edit/(?:(?P<id>\d+)/)?' => 'PhortuneMerchantEditController',
+          'orders/(?P<merchantID>\d+)/(?:query/(?P<querKey>[^/]+)/)?'
+            => 'PhortuneCartListController',
+          '(?P<id>\d+)/' => 'PhortuneMerchantViewController',
+        ),
+      ),
+    );
+  }
+
+  protected function getCustomCapabilities() {
+    return array(
+      PhortuneMerchantCapability::CAPABILITY => array(
+        'caption' => pht('Merchant accounts can receive payments.'),
+        'default' => PhabricatorPolicies::POLICY_ADMIN,
       ),
     );
   }

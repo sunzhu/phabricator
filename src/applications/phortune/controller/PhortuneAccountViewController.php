@@ -12,11 +12,22 @@ final class PhortuneAccountViewController extends PhortuneController {
     $request = $this->getRequest();
     $user = $request->getUser();
 
+    // TODO: Currently, you must be able to edit an account to view the detail
+    // page, because the account must be broadly visible so merchants can
+    // process orders but merchants should not be able to see all the details
+    // of an account. Ideally this page should be visible to merchants, too,
+    // just with less information.
+    $can_edit = true;
+
     $account = id(new PhortuneAccountQuery())
       ->setViewer($user)
       ->withIDs(array($this->accountID))
+      ->requireCapabilities(
+        array(
+          PhabricatorPolicyCapability::CAN_VIEW,
+          PhabricatorPolicyCapability::CAN_EDIT,
+        ))
       ->executeOne();
-
     if (!$account) {
       return new Aphront404Response();
     }
@@ -24,10 +35,14 @@ final class PhortuneAccountViewController extends PhortuneController {
     $title = $account->getName();
 
     $crumbs = $this->buildApplicationCrumbs();
-    $crumbs->addTextCrumb(pht('Account'), $request->getRequestURI());
+    $crumbs->addTextCrumb(
+      $account->getName(),
+      $request->getRequestURI());
 
     $header = id(new PHUIHeaderView())
       ->setHeader($title);
+
+    $edit_uri = $this->getApplicationURI('account/edit/'.$account->getID().'/');
 
     $actions = id(new PhabricatorActionListView())
       ->setUser($user)
@@ -36,14 +51,9 @@ final class PhortuneAccountViewController extends PhortuneController {
         id(new PhabricatorActionView())
           ->setName(pht('Edit Account'))
           ->setIcon('fa-pencil')
-          ->setHref('#')
-          ->setDisabled(true))
-      ->addAction(
-        id(new PhabricatorActionView())
-          ->setName(pht('Edit Members'))
-          ->setIcon('fa-users')
-          ->setHref('#')
-          ->setDisabled(true));
+          ->setHref($edit_uri)
+          ->setDisabled(!$can_edit)
+          ->setWorkflow(!$can_edit));
 
     $crumbs->setActionList($actions);
 
@@ -51,7 +61,12 @@ final class PhortuneAccountViewController extends PhortuneController {
       ->setObject($account)
       ->setUser($user);
 
-    $properties->addProperty(pht('Balance'), $account->getBalanceInCents());
+    $this->loadHandles($account->getMemberPHIDs());
+
+    $properties->addProperty(
+      pht('Members'),
+      $this->renderHandlesForPHIDs($account->getMemberPHIDs()));
+
     $properties->setActionList($actions);
 
     $payment_methods = $this->buildPaymentMethodsSection($account);
@@ -89,13 +104,7 @@ final class PhortuneAccountViewController extends PhortuneController {
     $id = $account->getID();
 
     $header = id(new PHUIHeaderView())
-      ->setHeader(pht('Payment Methods'))
-      ->addActionLink(
-        id(new PHUIButtonView())
-          ->setTag('a')
-          ->setHref($this->getApplicationURI($id.'/card/new/'))
-          ->setText(pht('Add Payment Method'))
-          ->setIcon(id(new PHUIIconView())->setIconFont('fa-plus')));
+      ->setHeader(pht('Payment Methods'));
 
     $list = id(new PHUIObjectItemListView())
       ->setUser($viewer)
@@ -136,7 +145,6 @@ final class PhortuneAccountViewController extends PhortuneController {
 
       $provider = $method->buildPaymentProvider();
       $item->addAttribute($provider->getPaymentMethodProviderDescription());
-      $item->setImageURI($provider->getPaymentMethodIcon());
 
       $edit_uri = $this->getApplicationURI('card/'.$id.'/edit/');
 
@@ -166,44 +174,62 @@ final class PhortuneAccountViewController extends PhortuneController {
       ->withStatuses(
         array(
           PhortuneCart::STATUS_PURCHASING,
+          PhortuneCart::STATUS_CHARGED,
+          PhortuneCart::STATUS_HOLD,
+          PhortuneCart::STATUS_REVIEW,
           PhortuneCart::STATUS_PURCHASED,
         ))
       ->execute();
 
+    $phids = array();
+    foreach ($carts as $cart) {
+      $phids[] = $cart->getPHID();
+      foreach ($cart->getPurchases() as $purchase) {
+        $phids[] = $purchase->getPHID();
+      }
+    }
+    $handles = $this->loadViewerHandles($phids);
+
     $rows = array();
     $rowc = array();
     foreach ($carts as $cart) {
-      $cart_link = phutil_tag(
-        'a',
-        array(
-          'href' => $this->getApplicationURI('cart/'.$cart->getID().'/'),
-        ),
-        pht('Cart %d', $cart->getID()));
+      $cart_link = $handles[$cart->getPHID()]->renderLink();
+      $purchases = $cart->getPurchases();
 
-      $rowc[] = 'highlighted';
+      if (count($purchases) == 1) {
+        $purchase_name = $handles[$purchase->getPHID()]->renderLink();
+        $purchases = array();
+      } else {
+        $purchase_name = '';
+      }
+
+      $rowc[] = '';
       $rows[] = array(
-        phutil_tag('strong', array(), $cart_link),
-        '',
-        '',
+        $cart->getID(),
+        phutil_tag(
+          'strong',
+          array(),
+          $cart_link),
+        $purchase_name,
+        phutil_tag(
+          'strong',
+          array(),
+          $cart->getTotalPriceAsCurrency()->formatForDisplay()),
+        PhortuneCart::getNameForStatus($cart->getStatus()),
+        phabricator_datetime($cart->getDateModified(), $viewer),
       );
-      foreach ($cart->getPurchases() as $purchase) {
+      foreach ($purchases as $purchase) {
         $id = $purchase->getID();
 
-        $price = $purchase->getTotalPriceInCents();
-        $price = PhortuneCurrency::newFromUSDCents($price)->formatForDisplay();
-
-        $purchase_link = phutil_tag(
-          'a',
-          array(
-            'href' => $this->getApplicationURI('purchase/'.$id.'/'),
-          ),
-          $purchase->getFullDisplayName());
+        $price = $purchase->getTotalPriceAsCurrency()->formatForDisplay();
 
         $rowc[] = '';
         $rows[] = array(
           '',
-          $purchase_link,
+          $handles[$purchase->getPHID()]->renderLink(),
           $price,
+          '',
+          '',
         );
       }
     }
@@ -212,19 +238,25 @@ final class PhortuneAccountViewController extends PhortuneController {
       ->setRowClasses($rowc)
       ->setHeaders(
         array(
-          pht('Cart'),
+          pht('ID'),
+          pht('Order'),
           pht('Purchase'),
           pht('Amount'),
+          pht('Status'),
+          pht('Updated'),
         ))
       ->setColumnClasses(
         array(
           '',
+          '',
           'wide',
+          'right',
+          '',
           'right',
         ));
 
     $header = id(new PHUIHeaderView())
-      ->setHeader(pht('Purchase History'));
+      ->setHeader(pht('Order History'));
 
     return id(new PHUIObjectBoxView())
       ->setHeader($header)
@@ -248,9 +280,6 @@ final class PhortuneAccountViewController extends PhortuneController {
     $request = $this->getRequest();
     $user = $request->getUser();
 
-    $header = id(new PHUIHeaderView())
-      ->setHeader(pht('Account History'));
-
     $xactions = id(new PhortuneAccountTransactionQuery())
       ->setViewer($user)
       ->withObjectPHIDs(array($account->getPHID()))
@@ -265,13 +294,20 @@ final class PhortuneAccountViewController extends PhortuneController {
       ->setTransactions($xactions)
       ->setMarkupEngine($engine);
 
-    $box = id(new PHUIObjectBoxView())
-      ->setHeader($header);
-
-    return array(
-      $box,
-      $xaction_view,
-    );
+    return $xaction_view;
   }
+
+  protected function buildApplicationCrumbs() {
+    $crumbs = parent::buildApplicationCrumbs();
+
+    $crumbs->addAction(
+      id(new PHUIListItemView())
+        ->setIcon('fa-exchange')
+        ->setHref($this->getApplicationURI('account/'))
+        ->setName(pht('Switch Accounts')));
+
+    return $crumbs;
+  }
+
 
 }

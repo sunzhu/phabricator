@@ -13,10 +13,14 @@ final class FundInitiative extends FundDAO
 
   protected $name;
   protected $ownerPHID;
+  protected $merchantPHID;
   protected $description;
+  protected $risks;
   protected $viewPolicy;
   protected $editPolicy;
   protected $status;
+  protected $totalAsCurrency;
+  protected $mailKey;
 
   private $projectPHIDs = self::ATTACHABLE;
 
@@ -42,7 +46,8 @@ final class FundInitiative extends FundDAO
       ->setOwnerPHID($actor->getPHID())
       ->setViewPolicy($view_policy)
       ->setEditPolicy($actor->getPHID())
-      ->setStatus(self::STATUS_OPEN);
+      ->setStatus(self::STATUS_OPEN)
+      ->setTotalAsCurrency(PhortuneCurrency::newEmptyCurrency());
   }
 
   public function getConfiguration() {
@@ -51,7 +56,22 @@ final class FundInitiative extends FundDAO
       self::CONFIG_COLUMN_SCHEMA => array(
         'name' => 'text255',
         'description' => 'text',
+        'risks' => 'text',
         'status' => 'text32',
+        'merchantPHID' => 'phid?',
+        'totalAsCurrency' => 'text64',
+        'mailKey' => 'bytes20',
+      ),
+      self::CONFIG_APPLICATION_SERIALIZERS => array(
+        'totalAsCurrency' => new PhortuneCurrencySerializer(),
+      ),
+      self::CONFIG_KEY_SCHEMA => array(
+        'key_status' => array(
+          'columns' => array('status'),
+        ),
+        'key_owner' => array(
+          'columns' => array('ownerPHID'),
+        ),
       ),
     ) + parent::getConfiguration();
   }
@@ -75,6 +95,13 @@ final class FundInitiative extends FundDAO
 
   public function isClosed() {
     return ($this->getStatus() == self::STATUS_CLOSED);
+  }
+
+  public function save() {
+    if (!$this->mailKey) {
+      $this->mailKey = Filesystem::readRandomCharacters(20);
+    }
+    return parent::save();
   }
 
 
