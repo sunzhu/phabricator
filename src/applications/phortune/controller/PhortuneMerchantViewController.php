@@ -43,6 +43,7 @@ final class PhortuneMerchantViewController
     $properties = $this->buildPropertyListView($merchant, $providers);
     $actions = $this->buildActionListView($merchant);
     $properties->setActionList($actions);
+    $crumbs->setActionList($actions);
 
     $provider_list = $this->buildProviderList(
       $merchant,
@@ -139,6 +140,12 @@ final class PhortuneMerchantViewController
     }
 
     $view->addProperty(pht('Status'), $status_view);
+
+    $this->loadHandles($merchant->getMemberPHIDs());
+
+    $view->addProperty(
+      pht('Members'),
+      $this->renderHandlesForPHIDs($merchant->getMemberPHIDs()));
 
     $view->invokeWillRenderEvent();
 

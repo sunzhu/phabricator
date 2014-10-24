@@ -7,6 +7,10 @@ final class FundBackerListController
   private $queryKey;
   private $initiative;
 
+  public function shouldAllowPublic() {
+    return true;
+  }
+
   public function willProcessRequest(array $data) {
     $this->id = idx($data, 'id');
     $this->queryKey = idx($data, 'queryKey');
@@ -25,7 +29,7 @@ final class FundBackerListController
       }
     }
 
-    $controller = id(new PhabricatorApplicationSearchController($request))
+    $controller = id(new PhabricatorApplicationSearchController())
       ->setQueryKey($this->queryKey)
       ->setSearchEngine($this->getEngine())
       ->setNavigation($this->buildSideNavView());

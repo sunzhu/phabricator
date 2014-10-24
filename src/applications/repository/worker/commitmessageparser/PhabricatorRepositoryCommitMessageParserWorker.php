@@ -17,7 +17,9 @@ abstract class PhabricatorRepositoryCommitMessageParserWorker
       $data = new PhabricatorRepositoryCommitData();
     }
     $data->setCommitID($commit->getID());
-    $data->setAuthorName((string)$author);
+    $data->setAuthorName(id(new PhutilUTF8StringTruncator())
+      ->setMaximumCodepoints(255)
+      ->truncateString((string)$author));
 
     $data->setCommitDetail('authorName', $ref->getAuthorName());
     $data->setCommitDetail('authorEmail', $ref->getAuthorEmail());
@@ -53,11 +55,12 @@ abstract class PhabricatorRepositoryCommitMessageParserWorker
 
     $differential_app = 'PhabricatorDifferentialApplication';
     $revision_id = null;
+    $low_level_query = null;
     if (PhabricatorApplication::isClassInstalled($differential_app)) {
-      $field_values = id(new DiffusionLowLevelCommitFieldsQuery())
+      $low_level_query = id(new DiffusionLowLevelCommitFieldsQuery())
         ->setRepository($repository)
-        ->withCommitRef($ref)
-        ->execute();
+        ->withCommitRef($ref);
+      $field_values = $low_level_query->execute();
       $revision_id = idx($field_values, 'revisionID');
 
       if (!empty($field_values['reviewedByPHIDs'])) {
@@ -160,9 +163,15 @@ abstract class PhabricatorRepositoryCommitMessageParserWorker
           $commit_close_xaction->setMetadataValue(
             'authorName',
             $data->getAuthorName());
-          $commit_close_xaction->setMetadataValue(
-            'commitHashes',
-            $hashes);
+
+          if ($low_level_query) {
+            $commit_close_xaction->setMetadataValue(
+              'revisionMatchData',
+              $low_level_query->getRevisionMatchData());
+            $data->setCommitDetail(
+              'revisionMatchData',
+              $low_level_query->getRevisionMatchData());
+          }
 
           $diff = $this->generateFinalDiff($revision, $acting_as_phid);
 
