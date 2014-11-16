@@ -6,20 +6,19 @@ final class PhrictionDocument extends PhrictionDAO
     PhabricatorSubscribableInterface,
     PhabricatorFlaggableInterface,
     PhabricatorTokenReceiverInterface,
-    PhabricatorDestructibleInterface {
+    PhabricatorDestructibleInterface,
+    PhabricatorApplicationTransactionInterface {
 
   protected $slug;
   protected $depth;
   protected $contentID;
   protected $status;
   protected $mailKey;
+  protected $viewPolicy;
+  protected $editPolicy;
 
   private $contentObject = self::ATTACHABLE;
   private $ancestors = array();
-
-  // TODO: This should be `self::ATTACHABLE`, but there are still a lot of call
-  // sites which load PhrictionDocuments directly.
-  private $project = null;
 
   public function getConfiguration() {
     return array(
@@ -65,6 +64,25 @@ final class PhrictionDocument extends PhrictionDAO
     $default_title = PhabricatorSlug::getDefaultTitle($slug);
     $content->setTitle($default_title);
     $document->attachContent($content);
+
+    $parent_doc = null;
+    $ancestral_slugs = PhabricatorSlug::getAncestry($slug);
+    if ($ancestral_slugs) {
+      $parent = end($ancestral_slugs);
+      $parent_doc = id(new PhrictionDocumentQuery())
+        ->setViewer($actor)
+        ->withSlugs(array($parent))
+        ->executeOne();
+    }
+
+    if ($parent_doc) {
+      $document->setViewPolicy($parent_doc->getViewPolicy());
+      $document->setEditPolicy($parent_doc->getEditPolicy());
+    } else {
+      $default_view_policy = PhabricatorPolicies::getMostOpenPolicy();
+      $document->setViewPolicy($default_view_policy);
+      $document->setEditPolicy(PhabricatorPolicies::POLICY_USER);
+    }
 
     return $document;
   }
@@ -114,19 +132,6 @@ final class PhrictionDocument extends PhrictionDAO
     return $this->assertAttached($this->contentObject);
   }
 
-  public function getProject() {
-    return $this->assertAttached($this->project);
-  }
-
-  public function attachProject(PhabricatorProject $project = null) {
-    $this->project = $project;
-    return $this;
-  }
-
-  public function hasProject() {
-    return (bool)$this->getProject();
-  }
-
   public function getAncestors() {
     return $this->ancestors;
   }
@@ -138,26 +143,6 @@ final class PhrictionDocument extends PhrictionDAO
   public function attachAncestor($slug, $ancestor) {
     $this->ancestors[$slug] = $ancestor;
     return $this;
-  }
-
-  public static function isProjectSlug($slug) {
-    $slug = PhabricatorSlug::normalize($slug);
-    $prefix = 'projects/';
-    if ($slug == $prefix) {
-      // The 'projects/' document is not itself a project slug.
-      return false;
-    }
-    return !strncmp($slug, $prefix, strlen($prefix));
-  }
-
-  public static function getProjectSlugIdentifier($slug) {
-    if (!self::isProjectSlug($slug)) {
-      throw new Exception("Slug '{$slug}' is not a project slug!");
-    }
-
-    $slug = PhabricatorSlug::normalize($slug);
-    $parts = explode('/', $slug);
-    return $parts[1].'/';
   }
 
 
@@ -172,30 +157,28 @@ final class PhrictionDocument extends PhrictionDAO
   }
 
   public function getPolicy($capability) {
-    if ($this->hasProject()) {
-      return $this->getProject()->getPolicy($capability);
+    switch ($capability) {
+      case PhabricatorPolicyCapability::CAN_VIEW:
+        return $this->getViewPolicy();
+      case PhabricatorPolicyCapability::CAN_EDIT:
+        return $this->getEditPolicy();
     }
-
-    return PhabricatorPolicies::POLICY_USER;
   }
 
   public function hasAutomaticCapability($capability, PhabricatorUser $user) {
-    if ($this->hasProject()) {
-      return $this->getProject()->hasAutomaticCapability($capability, $user);
-    }
     return false;
   }
 
   public function describeAutomaticCapability($capability) {
-    if ($this->hasProject()) {
-      return pht(
-        "This is a project wiki page, and inherits the project's policies.");
-    }
 
     switch ($capability) {
       case PhabricatorPolicyCapability::CAN_VIEW:
         return pht(
           'To view a wiki document, you must also be able to view all '.
+          'of its parents.');
+      case PhabricatorPolicyCapability::CAN_EDIT:
+        return pht(
+          'To edit a wiki document, you must also be able to view all '.
           'of its parents.');
     }
 
@@ -217,6 +200,22 @@ final class PhrictionDocument extends PhrictionDAO
   public function shouldAllowSubscription($phid) {
     return true;
   }
+
+/* -(  PhabricatorApplicationTransactionInterface  )------------------------- */
+
+
+  public function getApplicationTransactionEditor() {
+    return new PhrictionTransactionEditor();
+  }
+
+  public function getApplicationTransactionObject() {
+    return $this;
+  }
+
+  public function getApplicationTransactionTemplate() {
+    return new PhrictionTransaction();
+  }
+
 
 
 /* -(  PhabricatorTokenReceiverInterface  )---------------------------------- */
