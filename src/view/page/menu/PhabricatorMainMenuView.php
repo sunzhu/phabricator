@@ -270,13 +270,8 @@ final class PhabricatorMainMenuView extends AphrontView {
 
     require_celerity_resource('phabricator-notification-css');
     require_celerity_resource('phabricator-notification-menu-css');
-    require_celerity_resource('sprite-menu-css');
 
-    $container_classes = array(
-      'sprite-menu',
-      'alert-notifications',
-    );
-
+    $container_classes = array('alert-notifications');
     $aural = array();
 
     $message_tag = '';
@@ -321,10 +316,12 @@ final class PhabricatorMainMenuView extends AphrontView {
         ),
         $message_count_number);
 
-      $message_icon_tag = phutil_tag(
+      $message_icon_tag = javelin_tag(
         'span',
         array(
-          'class' => 'sprite-menu phabricator-main-menu-message-icon',
+          'class' => 'phabricator-main-menu-message-icon phui-icon-view '.
+                     'phui-font-fa fa-comments',
+          'sigil' => 'menu-icon',
         ),
         '');
 
@@ -405,10 +402,12 @@ final class PhabricatorMainMenuView extends AphrontView {
         ),
         $count_number);
 
-      $icon_tag = phutil_tag(
+      $icon_tag = javelin_tag(
         'span',
         array(
-          'class' => 'sprite-menu phabricator-main-menu-alert-icon',
+          'class' => 'phabricator-main-menu-alert-icon phui-icon-view '.
+                     'phui-font-fa fa-bell',
+          'sigil' => 'menu-icon',
         ),
         '');
 
