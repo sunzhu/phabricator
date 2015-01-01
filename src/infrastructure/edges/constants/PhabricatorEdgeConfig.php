@@ -5,24 +5,11 @@ final class PhabricatorEdgeConfig extends PhabricatorEdgeConstants {
   const TABLE_NAME_EDGE       = 'edge';
   const TABLE_NAME_EDGEDATA   = 'edgedata';
 
-  const TYPE_TASK_DEPENDS_ON_TASK       = 3;
-  const TYPE_TASK_DEPENDED_ON_BY_TASK   = 4;
-
   const TYPE_DREV_DEPENDS_ON_DREV       = 5;
   const TYPE_DREV_DEPENDED_ON_BY_DREV   = 6;
 
-  const TYPE_BLOG_HAS_POST              = 7;
-  const TYPE_POST_HAS_BLOG              = 8;
-  const TYPE_BLOG_HAS_BLOGGER           = 9;
-  const TYPE_BLOGGER_HAS_BLOG           = 10;
-
   const TYPE_PROJ_MEMBER                = 13;
   const TYPE_MEMBER_OF_PROJ             = 14;
-
-  const TYPE_QUESTION_HAS_VOTING_USER   = 17;
-  const TYPE_VOTING_USER_HAS_QUESTION   = 18;
-  const TYPE_ANSWER_HAS_VOTING_USER     = 19;
-  const TYPE_VOTING_USER_HAS_ANSWER     = 20;
 
   const TYPE_OBJECT_HAS_SUBSCRIBER      = 21;
   const TYPE_SUBSCRIBED_TO_OBJECT       = 22;
@@ -32,9 +19,6 @@ final class PhabricatorEdgeConfig extends PhabricatorEdgeConstants {
 
   const TYPE_OBJECT_HAS_FILE            = 25;
   const TYPE_FILE_HAS_OBJECT            = 26;
-
-  const TYPE_PURCAHSE_HAS_CHARGE        = 29;
-  const TYPE_CHARGE_HAS_PURCHASE        = 30;
 
   const TYPE_DREV_HAS_COMMIT            = 31;
   const TYPE_COMMIT_HAS_DREV            = 32;
@@ -56,9 +40,6 @@ final class PhabricatorEdgeConfig extends PhabricatorEdgeConstants {
 
   const TYPE_OBJECT_HAS_WATCHER         = 47;
   const TYPE_WATCHER_HAS_OBJECT         = 48;
-
-  const TYPE_OBJECT_NEEDS_SIGNATURE     = 49;
-  const TYPE_SIGNATURE_NEEDED_BY_OBJECT = 50;
 
 /* !!!! STOP !!!! STOP !!!! STOP !!!! STOP !!!! STOP !!!! STOP !!!! STOP !!!! */
 
@@ -131,26 +112,11 @@ final class PhabricatorEdgeConfig extends PhabricatorEdgeConstants {
 
   private static function getInverse($edge_type) {
     static $map = array(
-      self::TYPE_TASK_DEPENDS_ON_TASK => self::TYPE_TASK_DEPENDED_ON_BY_TASK,
-      self::TYPE_TASK_DEPENDED_ON_BY_TASK => self::TYPE_TASK_DEPENDS_ON_TASK,
-
       self::TYPE_DREV_DEPENDS_ON_DREV => self::TYPE_DREV_DEPENDED_ON_BY_DREV,
       self::TYPE_DREV_DEPENDED_ON_BY_DREV => self::TYPE_DREV_DEPENDS_ON_DREV,
 
-      self::TYPE_BLOG_HAS_POST    => self::TYPE_POST_HAS_BLOG,
-      self::TYPE_POST_HAS_BLOG    => self::TYPE_BLOG_HAS_POST,
-      self::TYPE_BLOG_HAS_BLOGGER => self::TYPE_BLOGGER_HAS_BLOG,
-      self::TYPE_BLOGGER_HAS_BLOG => self::TYPE_BLOG_HAS_BLOGGER,
-
       self::TYPE_PROJ_MEMBER => self::TYPE_MEMBER_OF_PROJ,
       self::TYPE_MEMBER_OF_PROJ => self::TYPE_PROJ_MEMBER,
-
-      self::TYPE_QUESTION_HAS_VOTING_USER =>
-        self::TYPE_VOTING_USER_HAS_QUESTION,
-      self::TYPE_VOTING_USER_HAS_QUESTION =>
-        self::TYPE_QUESTION_HAS_VOTING_USER,
-      self::TYPE_ANSWER_HAS_VOTING_USER => self::TYPE_VOTING_USER_HAS_ANSWER,
-      self::TYPE_VOTING_USER_HAS_ANSWER => self::TYPE_ANSWER_HAS_VOTING_USER,
 
       self::TYPE_OBJECT_HAS_SUBSCRIBER => self::TYPE_SUBSCRIBED_TO_OBJECT,
       self::TYPE_SUBSCRIBED_TO_OBJECT => self::TYPE_OBJECT_HAS_SUBSCRIBER,
@@ -190,11 +156,6 @@ final class PhabricatorEdgeConfig extends PhabricatorEdgeConstants {
 
       self::TYPE_OBJECT_HAS_WATCHER => self::TYPE_WATCHER_HAS_OBJECT,
       self::TYPE_WATCHER_HAS_OBJECT => self::TYPE_OBJECT_HAS_WATCHER,
-
-      self::TYPE_OBJECT_NEEDS_SIGNATURE =>
-        self::TYPE_SIGNATURE_NEEDED_BY_OBJECT,
-      self::TYPE_SIGNATURE_NEEDED_BY_OBJECT =>
-        self::TYPE_OBJECT_NEEDS_SIGNATURE,
     );
 
     return idx($map, $edge_type);
@@ -203,7 +164,6 @@ final class PhabricatorEdgeConfig extends PhabricatorEdgeConstants {
   private static function shouldPreventCycles($edge_type) {
     static $map = array(
       self::TYPE_TEST_NO_CYCLE          => true,
-      self::TYPE_TASK_DEPENDS_ON_TASK   => true,
       self::TYPE_DREV_DEPENDS_ON_DREV   => true,
     );
     return isset($map[$edge_type]);
@@ -238,8 +198,6 @@ final class PhabricatorEdgeConfig extends PhabricatorEdgeConstants {
     switch ($type) {
       case self::TYPE_DREV_HAS_COMMIT:
         return '%s edited commit(s), added %d: %s; removed %d: %s.';
-      case self::TYPE_TASK_DEPENDS_ON_TASK:
-      case self::TYPE_TASK_DEPENDED_ON_BY_TASK:
       case self::TYPE_MOCK_HAS_TASK:
         return '%s edited task(s), added %d: %s; removed %d: %s.';
       case self::TYPE_DREV_DEPENDS_ON_DREV:
@@ -247,24 +205,10 @@ final class PhabricatorEdgeConfig extends PhabricatorEdgeConstants {
       case self::TYPE_COMMIT_HAS_DREV:
       case self::TYPE_REVIEWER_FOR_DREV:
         return '%s edited revision(s), added %d: %s; removed %d: %s.';
-      case self::TYPE_BLOG_HAS_POST:
-        return '%s edited post(s), added %d: %s; removed %d: %s.';
-      case self::TYPE_POST_HAS_BLOG:
-      case self::TYPE_BLOGGER_HAS_BLOG:
-        return '%s edited blog(s), added %d: %s; removed %d: %s.';
-      case self::TYPE_BLOG_HAS_BLOGGER:
-        return '%s edited blogger(s), added %d: %s; removed %d: %s.';
       case self::TYPE_PROJ_MEMBER:
         return '%s edited member(s), added %d: %s; removed %d: %s.';
       case self::TYPE_MEMBER_OF_PROJ:
         return '%s edited project(s), added %d: %s; removed %d: %s.';
-      case self::TYPE_QUESTION_HAS_VOTING_USER:
-      case self::TYPE_ANSWER_HAS_VOTING_USER:
-        return '%s edited voting user(s), added %d: %s; removed %d: %s.';
-      case self::TYPE_VOTING_USER_HAS_QUESTION:
-        return '%s edited question(s), added %d: %s; removed %d: %s.';
-      case self::TYPE_VOTING_USER_HAS_ANSWER:
-        return '%s edited answer(s), added %d: %s; removed %d: %s.';
       case self::TYPE_OBJECT_HAS_SUBSCRIBER:
         return '%s edited subscriber(s), added %d: %s; removed %d: %s.';
       case self::TYPE_SUBSCRIBED_TO_OBJECT:
@@ -276,10 +220,6 @@ final class PhabricatorEdgeConfig extends PhabricatorEdgeConstants {
         return '%s edited unsubcriber(s), added %d: %s; removed %d: %s.';
       case self::TYPE_OBJECT_HAS_FILE:
         return '%s edited file(s), added %d: %s; removed %d: %s.';
-      case self::TYPE_PURCAHSE_HAS_CHARGE:
-        return '%s edited charge(s), added %d: %s; removed %d: %s.';
-      case self::TYPE_CHARGE_HAS_PURCHASE:
-        return '%s edited purchase(s), added %d: %s; removed %d: %s.';
       case self::TYPE_OBJECT_HAS_CONTRIBUTOR:
         return '%s edited contributor(s), added %d: %s; removed %d: %s.';
       case self::TYPE_DREV_HAS_REVIEWER:
@@ -304,46 +244,24 @@ final class PhabricatorEdgeConfig extends PhabricatorEdgeConstants {
     switch ($type) {
       case self::TYPE_DREV_HAS_COMMIT:
         return '%s added %d commit(s): %s.';
-      case self::TYPE_TASK_DEPENDS_ON_TASK:
-        return '%s added %d blocking task(s): %s.';
       case self::TYPE_DREV_DEPENDS_ON_DREV:
         return '%s added %d dependencie(s): %s.';
-      case self::TYPE_TASK_DEPENDED_ON_BY_TASK:
-        return '%s added %d blocked task(s): %s.';
       case self::TYPE_MOCK_HAS_TASK:
         return '%s added %d task(s): %s.';
       case self::TYPE_DREV_DEPENDED_ON_BY_DREV:
       case self::TYPE_COMMIT_HAS_DREV:
       case self::TYPE_REVIEWER_FOR_DREV:
         return '%s added %d revision(s): %s.';
-      case self::TYPE_BLOG_HAS_POST:
-        return '%s added %d post(s): %s.';
-      case self::TYPE_POST_HAS_BLOG:
-      case self::TYPE_BLOGGER_HAS_BLOG:
-        return '%s added %d blog(s): %s.';
-      case self::TYPE_BLOG_HAS_BLOGGER:
-        return '%s added %d blogger(s): %s.';
       case self::TYPE_PROJ_MEMBER:
         return '%s added %d member(s): %s.';
       case self::TYPE_MEMBER_OF_PROJ:
         return '%s added %d project(s): %s.';
-      case self::TYPE_QUESTION_HAS_VOTING_USER:
-      case self::TYPE_ANSWER_HAS_VOTING_USER:
-        return '%s added %d voting user(s): %s.';
-      case self::TYPE_VOTING_USER_HAS_QUESTION:
-        return '%s added %d question(s): %s.';
-      case self::TYPE_VOTING_USER_HAS_ANSWER:
-        return '%s added %d answer(s): %s.';
       case self::TYPE_OBJECT_HAS_SUBSCRIBER:
         return '%s added %d subscriber(s): %s.';
       case self::TYPE_OBJECT_HAS_UNSUBSCRIBER:
         return '%s added %d unsubcriber(s): %s.';
       case self::TYPE_OBJECT_HAS_FILE:
         return '%s added %d file(s): %s.';
-      case self::TYPE_PURCAHSE_HAS_CHARGE:
-        return '%s added %d charge(s): %s.';
-      case self::TYPE_CHARGE_HAS_PURCHASE:
-        return '%s added %d purchase(s): %s.';
       case self::TYPE_OBJECT_HAS_CONTRIBUTOR:
         return '%s added %d contributor(s): %s.';
       case self::TYPE_DREV_HAS_REVIEWER:
@@ -356,8 +274,6 @@ final class PhabricatorEdgeConfig extends PhabricatorEdgeConstants {
         return '%s added %d dashboard(s): %s.';
       case self::TYPE_OBJECT_HAS_WATCHER:
         return '%s added %d watcher(s): %s.';
-      case self::TYPE_OBJECT_NEEDS_SIGNATURE:
-        return '%s added %d required legal document(s): %s.';
       case self::TYPE_SUBSCRIBED_TO_OBJECT:
       case self::TYPE_UNSUBSCRIBED_FROM_OBJECT:
       case self::TYPE_FILE_HAS_OBJECT:
@@ -372,10 +288,6 @@ final class PhabricatorEdgeConfig extends PhabricatorEdgeConstants {
     switch ($type) {
       case self::TYPE_DREV_HAS_COMMIT:
         return '%s removed %d commit(s): %s.';
-      case self::TYPE_TASK_DEPENDS_ON_TASK:
-        return '%s removed %d blocking task(s): %s.';
-      case self::TYPE_TASK_DEPENDED_ON_BY_TASK:
-        return '%s removed %d blocked task(s): %s.';
       case self::TYPE_MOCK_HAS_TASK:
         return '%s removed %d task(s): %s.';
       case self::TYPE_DREV_DEPENDS_ON_DREV:
@@ -383,34 +295,16 @@ final class PhabricatorEdgeConfig extends PhabricatorEdgeConstants {
       case self::TYPE_COMMIT_HAS_DREV:
       case self::TYPE_REVIEWER_FOR_DREV:
         return '%s removed %d revision(s): %s.';
-      case self::TYPE_BLOG_HAS_POST:
-        return '%s removed %d post(s): %s.';
-      case self::TYPE_POST_HAS_BLOG:
-      case self::TYPE_BLOGGER_HAS_BLOG:
-        return '%s removed %d blog(s): %s.';
-      case self::TYPE_BLOG_HAS_BLOGGER:
-        return '%s removed %d blogger(s): %s.';
       case self::TYPE_PROJ_MEMBER:
         return '%s removed %d member(s): %s.';
       case self::TYPE_MEMBER_OF_PROJ:
         return '%s removed %d project(s): %s.';
-      case self::TYPE_QUESTION_HAS_VOTING_USER:
-      case self::TYPE_ANSWER_HAS_VOTING_USER:
-        return '%s removed %d voting user(s): %s.';
-      case self::TYPE_VOTING_USER_HAS_QUESTION:
-        return '%s removed %d question(s): %s.';
-      case self::TYPE_VOTING_USER_HAS_ANSWER:
-        return '%s removed %d answer(s): %s.';
       case self::TYPE_OBJECT_HAS_SUBSCRIBER:
         return '%s removed %d subscriber(s): %s.';
       case self::TYPE_OBJECT_HAS_UNSUBSCRIBER:
         return '%s removed %d unsubcriber(s): %s.';
       case self::TYPE_OBJECT_HAS_FILE:
         return '%s removed %d file(s): %s.';
-      case self::TYPE_PURCAHSE_HAS_CHARGE:
-        return '%s removed %d charge(s): %s.';
-      case self::TYPE_CHARGE_HAS_PURCHASE:
-        return '%s removed %d purchase(s): %s.';
       case self::TYPE_OBJECT_HAS_CONTRIBUTOR:
         return '%s removed %d contributor(s): %s.';
       case self::TYPE_DREV_HAS_REVIEWER:
@@ -437,8 +331,6 @@ final class PhabricatorEdgeConfig extends PhabricatorEdgeConstants {
     switch ($type) {
       case self::TYPE_DREV_HAS_COMMIT:
         return '%s updated commits of %s.';
-      case self::TYPE_TASK_DEPENDS_ON_TASK:
-      case self::TYPE_TASK_DEPENDED_ON_BY_TASK:
       case self::TYPE_MOCK_HAS_TASK:
         return '%s updated tasks of %s.';
       case self::TYPE_DREV_DEPENDS_ON_DREV:
@@ -446,34 +338,16 @@ final class PhabricatorEdgeConfig extends PhabricatorEdgeConstants {
       case self::TYPE_COMMIT_HAS_DREV:
       case self::TYPE_REVIEWER_FOR_DREV:
         return '%s updated revisions of %s.';
-      case self::TYPE_BLOG_HAS_POST:
-        return '%s updated posts of %s.';
-      case self::TYPE_POST_HAS_BLOG:
-      case self::TYPE_BLOGGER_HAS_BLOG:
-        return '%s updated blogs of %s.';
-      case self::TYPE_BLOG_HAS_BLOGGER:
-        return '%s updated bloggers of %s.';
       case self::TYPE_PROJ_MEMBER:
         return '%s updated members of %s.';
       case self::TYPE_MEMBER_OF_PROJ:
         return '%s updated projects of %s.';
-      case self::TYPE_QUESTION_HAS_VOTING_USER:
-      case self::TYPE_ANSWER_HAS_VOTING_USER:
-        return '%s updated voting users of %s.';
-      case self::TYPE_VOTING_USER_HAS_QUESTION:
-        return '%s updated questions of %s.';
-      case self::TYPE_VOTING_USER_HAS_ANSWER:
-        return '%s updated answers of %s.';
       case self::TYPE_OBJECT_HAS_SUBSCRIBER:
         return '%s updated subscribers of %s.';
       case self::TYPE_OBJECT_HAS_UNSUBSCRIBER:
         return '%s updated unsubcribers of %s.';
       case self::TYPE_OBJECT_HAS_FILE:
         return '%s updated files of %s.';
-      case self::TYPE_PURCAHSE_HAS_CHARGE:
-        return '%s updated charges of %s.';
-      case self::TYPE_CHARGE_HAS_PURCHASE:
-        return '%s updated purchases of %s.';
       case self::TYPE_OBJECT_HAS_CONTRIBUTOR:
         return '%s updated contributors of %s.';
       case self::TYPE_DREV_HAS_REVIEWER:

@@ -1331,8 +1331,9 @@ final class DifferentialTransactionEditor
     $previous_comments = $comments_by_line_number[$comment->getChangesetID()]
                                                  [$comment->getLineNumber()];
     foreach ($previous_comments as $previous_comment) {
-      if ($previous_comment->getID() >= $comment->getID())
+      if ($previous_comment->getID() >= $comment->getID()) {
         break;
+      }
       $nested = $this->indentForMail(
         array_merge(
           $nested,
@@ -1632,7 +1633,7 @@ final class DifferentialTransactionEditor
 
       // If we still have something to trigger, add the edges.
       if ($legal_phids) {
-        $edge_legal = PhabricatorEdgeConfig::TYPE_OBJECT_NEEDS_SIGNATURE;
+        $edge_legal = LegalpadObjectNeedsSignatureEdgeType::EDGECONST;
         $xactions[] = id(new DifferentialTransaction())
           ->setTransactionType(PhabricatorTransactions::TYPE_EDGE)
           ->setMetadataValue('edge:type', $edge_legal)

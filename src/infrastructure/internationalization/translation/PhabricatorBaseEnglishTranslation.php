@@ -57,11 +57,6 @@ abstract class PhabricatorBaseEnglishTranslation
       'changed %d commit(s), added %d: %s; removed %d: %s' =>
         'changed commits, added: %3$s; removed: %5$s',
 
-      'ATTACHED %d COMMIT(S)' => array(
-        'ATTACHED COMMIT',
-        'ATTACHED COMMITS',
-      ),
-
       'added %d mock(s): %s' => array(
         'added a mock: %2$s',
         'added mocks: %2$s',
@@ -72,53 +67,14 @@ abstract class PhabricatorBaseEnglishTranslation
         'removed mocks: %2$s',
       ),
 
-      'changed %d mock(s), added %d: %s; removed %d: %s' =>
-        'changed mocks, added: %3$s; removed: %5$s',
-
-      'ATTACHED %d MOCK(S)' => array(
-        'ATTACHED MOCK',
-        'ATTACHED MOCKS',
-      ),
-
       'added %d dependencie(s): %s' => array(
         'added dependency: %2$s',
         'added dependencies: %2$s',
       ),
 
-      'added %d dependent task(s): %s' => array(
-        'added dependent task: %2$s',
-        'added dependent tasks: %2$s',
-      ),
-
       'removed %d dependencie(s): %s' => array(
         'removed dependency: %2$s',
         'removed dependencies: %2$s',
-      ),
-
-      'removed %d dependent task(s): %s' => array(
-        'removed dependent task: %2$s',
-        'removed dependent tasks: %2$s',
-      ),
-
-      'changed %d dependencie(s), added %d: %s; removed %d: %s' =>
-        'changed dependencies, added: %3$s; removed: %5$s',
-
-      'changed %d dependent task(s), added %d: %s; removed %d: %s',
-        'changed dependent tasks, added: %3$s; removed: %5$s',
-
-      'DEPENDENT %d TASK(s)' => array(
-        'DEPENDENT TASK',
-        'DEPENDENT TASKS',
-      ),
-
-      'DEPENDS ON %d TASK(S)' => array(
-        'DEPENDS ON TASK',
-        'DEPENDS ON TASKS',
-      ),
-
-      'DIFFERENTIAL %d REVISION(S)' => array(
-        'DIFFERENTIAL REVISION',
-        'DIFFERENTIAL REVISIONS',
       ),
 
       'added %d revision(s): %s' => array(
@@ -130,9 +86,6 @@ abstract class PhabricatorBaseEnglishTranslation
         'removed revision: %2$s',
         'removed revisions: %2$s',
       ),
-
-      'changed %d revision(s), added %d: %s; removed %d: %s' =>
-        'changed revisions, added %3$s; removed %5$s',
 
       '%s edited revision(s), added %d: %s; removed %d: %s.' =>
         '%s edited revisions, added: %3$s; removed: %5$s',
@@ -249,57 +202,6 @@ abstract class PhabricatorBaseEnglishTranslation
         'The actions you are taking have no effect:',
       ),
 
-      '%s edited post(s), added %d: %s; removed %d: %s.' =>
-        '%s edited posts, added: %3$s; removed: %5$s',
-
-      '%s added %d post(s): %s.' => array(
-        array(
-          '%s added a post: %3$s.',
-          '%s added posts: %3$s.',
-        ),
-      ),
-
-      '%s removed %d post(s): %s.' => array(
-        array(
-          '%s removed a post: %3$s.',
-          '%s removed posts: %3$s.',
-        ),
-      ),
-
-      '%s edited blog(s), added %d: %s; removed %d: %s.' =>
-        '%s edited blogs, added: %3$s; removed: %5$s',
-
-      '%s added %d blog(s): %s.' => array(
-        array(
-          '%s added a blog: %3$s.',
-          '%s added blogs: %3$s.',
-        ),
-      ),
-
-      '%s removed %d blog(s): %s.' => array(
-        array(
-          '%s removed a blog: %3$s.',
-          '%s removed blogs: %3$s.',
-        ),
-      ),
-
-      '%s edited blogger(s), added %d: %s; removed %d: %s.' =>
-        '%s edited bloggers, added: %3$s; removed: %5$s',
-
-      '%s added %d blogger(s): %s.' => array(
-        array(
-          '%s added a blogger: %3$s.',
-          '%s added bloggers: %3$s.',
-        ),
-      ),
-
-      '%s removed %d blogger(s): %s.' => array(
-        array(
-          '%s removed a blogger: %3$s.',
-          '%s removed bloggers: %3$s.',
-        ),
-      ),
-
       '%s edited member(s), added %d: %s; removed %d: %s.' =>
         '%s edited members, added: %3$s; removed: %5$s',
 
@@ -334,23 +236,6 @@ abstract class PhabricatorBaseEnglishTranslation
         ),
       ),
 
-      '%s changed project(s) of %s, added %d: %s; removed %d: %s' =>
-        '%s changed projects of %s, added: %4$s; removed: %6$s',
-
-      '%s added %d project(s) to %s: %s' => array(
-        array(
-          '%s added a project to %3$s: %4$s',
-          '%s added projects to %3$s: %4$s',
-        ),
-      ),
-
-      '%s removed %d project(s) from %s: %s' => array(
-        array(
-          '%s removed a project from %3$s: %4$s',
-          '%s removed projects from %3$s: %4$s',
-        ),
-      ),
-
       '%s merged %d task(s): %s.' => array(
         array(
           '%s merged a task: %3$s.',
@@ -365,79 +250,119 @@ abstract class PhabricatorBaseEnglishTranslation
         ),
       ),
 
-      '%s edited voting user(s), added %d: %s; removed %d: %s.' =>
+      '%s edited voting user(s), added %s: %s; removed %d: %s.' =>
         '%s edited voting users, added: %3$s; removed: %5$s',
 
-      '%s added %d voting user(s): %s.' => array(
+      '%s added %s voting user(s): %s.' => array(
         array(
           '%s added a voting user: %3$s.',
           '%s added voting users: %3$s.',
         ),
       ),
 
-      '%s removed %d voting user(s): %s.' => array(
+      '%s removed %s voting user(s): %s.' => array(
         array(
           '%s removed a voting user: %3$s.',
           '%s removed voting users: %3$s.',
         ),
       ),
 
-      '%s added %d blocking task(s): %s.' => array(
+      '%s added %s blocking task(s): %s.' => array(
         array(
           '%s added a blocking task: %3$s.',
           '%s added blocking tasks: %3$s.',
         ),
       ),
 
-      '%s added %d blocked task(s): %s.' => array(
+      '%s added %s blocked task(s): %s.' => array(
         array(
           '%s added a blocked task: %3$s.',
           '%s added blocked tasks: %3$s.',
         ),
       ),
 
-      '%s removed %d blocking task(s): %s.' => array(
+      '%s removed %s blocking task(s): %s.' => array(
         array(
           '%s removed a blocking task: %3$s.',
           '%s removed blocking tasks: %3$s.',
         ),
       ),
 
-      '%s removed %d blocked task(s): %s.' => array(
+      '%s removed %s blocked task(s): %s.' => array(
         array(
           '%s removed a blocked task: %3$s.',
           '%s removed blocked tasks: %3$s.',
         ),
       ),
 
-      '%s edited answer(s), added %d: %s; removed %d: %s.' =>
+      '%s added %s blocking task(s) for %s: %s.' => array(
+        array(
+          '%s added a blocking task for %3$s: %4$s.',
+          '%s added blocking tasks for %3$s: %4$s.',
+        ),
+      ),
+
+      '%s added %s blocked task(s) for %s: %s.' => array(
+        array(
+          '%s added a blocked task for %3$s: %4$s.',
+          '%s added blocked tasks for %3$s: %4$s.',
+        ),
+      ),
+
+      '%s removed %s blocking task(s) for %s: %s.' => array(
+        array(
+          '%s removed a blocking task for %3$s: %4$s.',
+          '%s removed blocking tasks for %3$s: %4$s.',
+        ),
+      ),
+
+      '%s removed %s blocked task(s) for %s: %s.' => array(
+        array(
+          '%s removed a blocked task for %3$s: %4$s.',
+          '%s removed blocked tasks for %3$s: %4$s.',
+        ),
+      ),
+
+      '%s edited blocking task(s), added %s: %s; removed %s: %s.' =>
+        '%s edited blocking tasks, added: %3$s; removed: %5$s',
+
+      '%s edited blocking task(s) for %s, added %s: %s; removed %s: %s.' =>
+        '%s edited blocking tasks for %s, added: %4$s; removed: %6$s',
+
+      '%s edited blocked task(s), added %s: %s; removed %s: %s.' =>
+        '%s edited blocked tasks, added: %3$s; removed: %5$s',
+
+      '%s edited blocked task(s) for %s, added %s: %s; removed %s: %s.' =>
+        '%s edited blocked tasks for %s, added: %4$s; removed: %6$s',
+
+      '%s edited answer(s), added %s: %s; removed %d: %s.' =>
         '%s edited answers, added: %3$s; removed: %5$s',
 
-      '%s added %d answer(s): %s.' => array(
+      '%s added %s answer(s): %s.' => array(
         array(
           '%s added an answer: %3$s.',
           '%s added answers: %3$s.',
         ),
       ),
 
-      '%s removed %d answer(s): %s.' => array(
+      '%s removed %s answer(s): %s.' => array(
         array(
           '%s removed a answer: %3$s.',
           '%s removed answers: %3$s.',
         ),
       ),
 
-     '%s edited question(s), added %d: %s; removed %d: %s.' =>
+     '%s edited question(s), added %s: %s; removed %s: %s.' =>
         '%s edited questions, added: %3$s; removed: %5$s',
 
-      '%s added %d question(s): %s.' => array(
+      '%s added %s question(s): %s.' => array(
         array(
           '%s added a question: %3$s.',
           '%s added questions: %3$s.',
         ),
       ),
 
-      '%s removed %d question(s): %s.' => array(
+      '%s removed %s question(s): %s.' => array(
         array(
           '%s removed a question: %3$s.',
           '%s removed questions: %3$s.',
@@ -461,7 +386,7 @@ abstract class PhabricatorBaseEnglishTranslation
         ),
       ),
 
-      '%s edited task(s), added %d: %s; removed %d: %s.' =>
+      '%s edited task(s), added %d: %s; removed %s: %s.' =>
         '%s edited tasks, added: %3$s; removed: %5$s',
 
       '%s added %d task(s): %s.' => array(
@@ -492,57 +417,6 @@ abstract class PhabricatorBaseEnglishTranslation
         array(
           '%s removed a file: %3$s.',
           '%s removed files: %3$s.',
-        ),
-      ),
-
-      '%s edited account(s), added %d: %s; removed %d: %s.' =>
-        '%s edited accounts, added: %3$s; removed: %5$s',
-
-      '%s added %d account(s): %s.' => array(
-        array(
-          '%s added a account: %3$s.',
-          '%s added accounts: %3$s.',
-        ),
-      ),
-
-      '%s removed %d account(s): %s.' => array(
-        array(
-          '%s removed a account: %3$s.',
-          '%s removed accounts: %3$s.',
-        ),
-      ),
-
-      '%s edited charge(s), added %d: %s; removed %d: %s.' =>
-        '%s edited charges, added: %3$s; removed: %5$s',
-
-      '%s added %d charge(s): %s.' => array(
-        array(
-          '%s added a charge: %3$s.',
-          '%s added charges: %3$s.',
-        ),
-      ),
-
-      '%s removed %d charge(s): %s.' => array(
-        array(
-          '%s removed a charge: %3$s.',
-          '%s removed charges: %3$s.',
-        ),
-      ),
-
-      '%s edited purchase(s), added %d: %s; removed %d: %s.' =>
-        '%s edited purchases, added: %3$s; removed: %5$s',
-
-      '%s added %d purchase(s): %s.' => array(
-        array(
-          '%s added a purchase: %3$s.',
-          '%s added purchases: %3$s.',
-        ),
-      ),
-
-      '%s removed %d purchase(s): %s.' => array(
-        array(
-          '%s removed a purchase: %3$s.',
-          '%s removed purchases: %3$s.',
         ),
       ),
 
@@ -621,20 +495,6 @@ abstract class PhabricatorBaseEnglishTranslation
 
       '%s edited unsubscriber(s), added %d: %s; removed %d: %s.' =>
         '%s edited unsubscribers, added: %3$s; removed: %5$s',
-
-      '%s added %d unsubscriber(s): %s.' => array(
-        array(
-          '%s added a unsubscriber: %3$s.',
-          '%s added unsubscribers: %3$s.',
-        ),
-      ),
-
-      '%s removed %d unsubscriber(s): %s.' => array(
-        array(
-          '%s removed a unsubscriber: %3$s.',
-          '%s removed unsubscribers: %3$s.',
-        ),
-      ),
 
       '%s edited participant(s), added %d: %s; removed %d: %s.' =>
         '%s edited participants, added: %3$s; removed: %5$s',
@@ -799,9 +659,6 @@ abstract class PhabricatorBaseEnglishTranslation
         ),
       ),
 
-      '%s changed project(s), added %d: %s; removed %d: %s' =>
-        '%s changed projects, added: %3$s; removed: %5$s',
-
       '%s attached %d file(s): %s' => array(
         array(
           '%s attached a file: %3$s',
@@ -827,24 +684,10 @@ abstract class PhabricatorBaseEnglishTranslation
         ),
       ),
 
-      '%s added %d dependent task(s): %s.' => array(
-        array(
-          '%s added a dependent task: %3$s',
-          '%s added dependent tasks: %3$s',
-        ),
-      ),
-
       '%s removed %d dependencie(s): %s.' => array(
         array(
           '%s removed a dependency: %3$s.',
           '%s removed dependencies: %3$s.',
-        ),
-      ),
-
-      '%s removed %d dependent task(s): %s.' => array(
-        array(
-          '%s removed a dependent task: %3$s.',
-          '%s removed dependent tasks: %3$s.',
         ),
       ),
 
@@ -959,7 +802,7 @@ abstract class PhabricatorBaseEnglishTranslation
         ),
       ),
 
-      '%s added %d required legal document(s): %s.' => array(
+      '%s added %s required legal document(s): %s.' => array(
         array(
           '%s added a required legal document: %3$s.',
           '%s added required legal documents: %3$s.',
