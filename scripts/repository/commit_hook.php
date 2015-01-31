@@ -1,5 +1,33 @@
-#!/usr/bin/env php
+#!/usr/bin/env TERM=dumb php
 <?php
+
+// NOTE: Note that we're specifying TERM=dumb above when invoking the PHP
+// interpreter. This suppresses an error which looks like this:
+//
+//   No entry for terminal type "unknown";
+//   using dumb terminal settings.
+//
+// This arises from somewhere in the PHP startup machinery if TERM is not
+// set to a recognized value.
+
+// Commit hooks execute in an unusual context where the environment may be
+// unavailable, particularly in SVN. The first parameter to this script is
+// either a bare repository identifier ("X"), or a repository identifier
+// followed by an instance identifier ("X:instance"). If we have an instance
+// identifier, unpack it into the environment before we start up. This allows
+// subclasses of PhabricatorConfigSiteSource to read it and build an instance
+// environment.
+
+if ($argc > 1) {
+  $context = $argv[1];
+  $context = explode(':', $context, 2);
+  $argv[1] = $context[0];
+
+  if (count($context) > 1) {
+    $_ENV['PHABRICATOR_INSTANCE'] = $context[1];
+    putenv('PHABRICATOR_INSTANCE='.$context[1]);
+  }
+}
 
 $root = dirname(dirname(dirname(__FILE__)));
 require_once $root.'/scripts/__init_script__.php';

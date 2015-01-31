@@ -14,8 +14,8 @@ final class PhabricatorFilesApplication extends PhabricatorApplication {
     return pht('Store and Share Files');
   }
 
-  public function getIconName() {
-    return 'files';
+  public function getFontIcon() {
+    return 'fa-file';
   }
 
   public function getTitleGlyph() {
@@ -38,6 +38,21 @@ final class PhabricatorFilesApplication extends PhabricatorApplication {
     return array(
       new PhabricatorEmbedFileRemarkupRule(),
     );
+  }
+
+  public function supportsEmailIntegration() {
+    return true;
+  }
+
+  public function getAppEmailBlurb() {
+    return pht(
+      'Send emails with file attachments to these addresses to upload '.
+      'files. %s',
+      phutil_tag(
+        'a',
+        array(
+          'href' => $this->getInboundEmailSupportLink(),),
+        pht('Learn More')));
   }
 
   protected function getCustomCapabilities() {

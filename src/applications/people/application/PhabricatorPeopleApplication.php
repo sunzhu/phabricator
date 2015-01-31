@@ -18,8 +18,8 @@ final class PhabricatorPeopleApplication extends PhabricatorApplication {
     return "\xE2\x99\x9F";
   }
 
-  public function getIconName() {
-    return 'people';
+  public function getFontIcon() {
+    return 'fa-users';
   }
 
   public function isPinnedByDefault(PhabricatorUser $viewer) {
@@ -78,6 +78,9 @@ final class PhabricatorPeopleApplication extends PhabricatorApplication {
 
   protected function getCustomCapabilities() {
     return array(
+      PeopleCreateUsersCapability::CAPABILITY => array(
+        'default' => PhabricatorPolicies::POLICY_ADMIN,
+      ),
       PeopleBrowseUserDirectoryCapability::CAPABILITY => array(),
     );
   }

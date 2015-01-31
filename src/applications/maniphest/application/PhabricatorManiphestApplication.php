@@ -14,8 +14,12 @@ final class PhabricatorManiphestApplication extends PhabricatorApplication {
     return '/maniphest/';
   }
 
-  public function getIconName() {
-    return 'maniphest';
+  public function getFontIcon() {
+    return 'fa-anchor';
+  }
+
+  public function getTitleGlyph() {
+    return "\xE2\x9A\x93";
   }
 
   public function isPinnedByDefault(PhabricatorUser $viewer) {
@@ -107,6 +111,20 @@ final class PhabricatorManiphestApplication extends PhabricatorApplication {
     $items[] = $item;
 
     return $items;
+  }
+
+  public function supportsEmailIntegration() {
+    return true;
+  }
+
+  public function getAppEmailBlurb() {
+    return pht(
+      'Send email to these addresses to create tasks. %s',
+      phutil_tag(
+        'a',
+        array(
+          'href' => $this->getInboundEmailSupportLink(),),
+        pht('Learn More')));
   }
 
   protected function getCustomCapabilities() {

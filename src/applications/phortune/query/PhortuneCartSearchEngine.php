@@ -5,6 +5,7 @@ final class PhortuneCartSearchEngine
 
   private $merchant;
   private $account;
+  private $subscription;
 
   public function setAccount(PhortuneAccount $account) {
     $this->account = $account;
@@ -22,6 +23,15 @@ final class PhortuneCartSearchEngine
 
   public function getMerchant() {
     return $this->merchant;
+  }
+
+  public function setSubscription(PhortuneSubscription $subscription) {
+    $this->subscription = $subscription;
+    return $this;
+  }
+
+  public function getSubscription() {
+    return $this->subscription;
   }
 
   public function getResultTypeDescription() {
@@ -83,6 +93,11 @@ final class PhortuneCartSearchEngine
       }
     }
 
+    $subscription = $this->getSubscription();
+    if ($subscription) {
+      $query->withSubscriptionPHIDs(array($subscription->getPHID()));
+    }
+
     return $query;
   }
 
@@ -102,7 +117,7 @@ final class PhortuneCartSearchEngine
     }
   }
 
-  public function getBuiltinQueryNames() {
+  protected function getBuiltinQueryNames() {
     $names = array(
       'all' => pht('All Orders'),
     );

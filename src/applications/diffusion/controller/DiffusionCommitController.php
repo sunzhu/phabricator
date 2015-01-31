@@ -11,19 +11,18 @@ final class DiffusionCommitController extends DiffusionController {
     return true;
   }
 
-  public function willProcessRequest(array $data) {
-    // This controller doesn't use blob/path stuff, just pass the dictionary
-    // in directly instead of using the AphrontRequest parsing mechanism.
-    $data['user'] = $this->getRequest()->getUser();
-    $drequest = DiffusionRequest::newFromDictionary($data);
-    $this->diffusionRequest = $drequest;
+  protected function shouldLoadDiffusionRequest() {
+    return false;
   }
 
-  public function processRequest() {
-    $drequest = $this->getDiffusionRequest();
-
-    $request = $this->getRequest();
+  protected function processDiffusionRequest(AphrontRequest $request) {
     $user = $request->getUser();
+    // This controller doesn't use blob/path stuff, just pass the dictionary
+    // in directly instead of using the AphrontRequest parsing mechanism.
+    $data = $request->getURIMap();
+    $data['user'] = $user;
+    $drequest = DiffusionRequest::newFromDictionary($data);
+    $this->diffusionRequest = $drequest;
 
     if ($request->getStr('diff')) {
       return $this->buildRawDiffResponse($drequest);
@@ -70,11 +69,6 @@ final class DiffusionCommitController extends DiffusionController {
         ));
     }
 
-
-    $top_anchor = id(new PhabricatorAnchorView())
-      ->setAnchorName('top')
-      ->setNavigationMarker(true);
-
     $audit_requests = $commit->getAudits();
     $this->auditAuthorityPHIDs =
       PhabricatorAuditCommentEditor::loadAuditPHIDsForUser($user);
@@ -94,7 +88,6 @@ final class DiffusionCommitController extends DiffusionController {
         "didn't affect the tracked subdirectory ('%s'), so no ".
         "information is available.", $subpath));
       $content[] = $error_panel;
-      $content[] = $top_anchor;
     } else {
       $engine = PhabricatorMarkupEngine::newDifferentialMarkupEngine();
       $engine->setConfig('viewer', $user);
@@ -152,7 +145,6 @@ final class DiffusionCommitController extends DiffusionController {
             'class' => 'diffusion-commit-message phabricator-remarkup',
           ),
           $message));
-      $content[] = $top_anchor;
 
       $object_box = id(new PHUIObjectBoxView())
         ->setHeader($headsup_view)
@@ -382,7 +374,6 @@ final class DiffusionCommitController extends DiffusionController {
 
     if ($changesets && $show_filetree) {
       $nav = id(new DifferentialChangesetFileTreeSideNavBuilder())
-        ->setAnchorName('top')
         ->setTitle($short_name)
         ->setBaseURI(new PhutilURI('/'.$commit_id))
         ->build($changesets)
@@ -418,7 +409,9 @@ final class DiffusionCommitController extends DiffusionController {
       ->withSourcePHIDs(array($commit_phid))
       ->withEdgeTypes(array(
         DiffusionCommitHasTaskEdgeType::EDGECONST,
-        PhabricatorEdgeConfig::TYPE_COMMIT_HAS_DREV,
+        DiffusionCommitHasRevisionEdgeType::EDGECONST,
+        DiffusionCommitRevertsCommitEdgeType::EDGECONST,
+        DiffusionCommitRevertedByCommitEdgeType::EDGECONST,
       ));
 
     $edges = $edge_query->execute();
@@ -426,7 +419,12 @@ final class DiffusionCommitController extends DiffusionController {
     $task_phids = array_keys(
       $edges[$commit_phid][DiffusionCommitHasTaskEdgeType::EDGECONST]);
     $revision_phid = key(
-      $edges[$commit_phid][PhabricatorEdgeConfig::TYPE_COMMIT_HAS_DREV]);
+      $edges[$commit_phid][DiffusionCommitHasRevisionEdgeType::EDGECONST]);
+
+    $reverts_phids = array_keys(
+      $edges[$commit_phid][DiffusionCommitRevertsCommitEdgeType::EDGECONST]);
+    $reverted_by_phids = array_keys(
+      $edges[$commit_phid][DiffusionCommitRevertedByCommitEdgeType::EDGECONST]);
 
     $phids = $edge_query->getDestinationPHIDs(array($commit_phid));
 
@@ -615,6 +613,17 @@ final class DiffusionCommitController extends DiffusionController {
       $props['References'] = $refs;
     }
 
+    if ($reverts_phids) {
+      $this->loadHandles($reverts_phids);
+      $props[pht('Reverts')] = $this->renderHandlesForPHIDs($reverts_phids);
+    }
+
+    if ($reverted_by_phids) {
+      $this->loadHandles($reverted_by_phids);
+      $props[pht('Reverted By')] = $this->renderHandlesForPHIDs(
+        $reverted_by_phids);
+    }
+
     if ($task_phids) {
       $task_list = array();
       foreach ($task_phids as $phid) {
@@ -631,27 +640,8 @@ final class DiffusionCommitController extends DiffusionController {
     $timeline = $this->buildTransactionTimeline(
       $commit,
       new PhabricatorAuditTransactionQuery());
-    $xactions = $timeline->getTransactions();
-
-    $path_ids = array();
-    foreach ($xactions as $xaction) {
-      if ($xaction->hasComment()) {
-        $path_id = $xaction->getComment()->getPathID();
-        if ($path_id) {
-          $path_ids[] = $path_id;
-        }
-      }
-    }
-
-    $path_map = array();
-    if ($path_ids) {
-      $path_map = id(new DiffusionPathQuery())
-        ->withPathIDs($path_ids)
-        ->execute();
-      $path_map = ipull($path_map, 'path', 'id');
-    }
-
-    return $timeline->setPathMap($path_map);
+    $commit->willRenderTimeline($timeline, $this->getRequest());
+    return $timeline;
   }
 
   private function renderAddCommentPanel(

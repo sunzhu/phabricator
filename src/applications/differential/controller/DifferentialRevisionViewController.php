@@ -442,22 +442,15 @@ final class DifferentialRevisionViewController extends DifferentialController {
           ->setRequestURI($request->getRequestURI()));
     }
 
-
     $object_id = 'D'.$revision->getID();
 
-    $top_anchor = id(new PhabricatorAnchorView())
-      ->setAnchorName('top')
-      ->setNavigationMarker(true);
-
     $content = array(
-      $top_anchor,
       $revision_detail_box,
       $page_pane,
     );
 
     $crumbs = $this->buildApplicationCrumbs();
     $crumbs->addTextCrumb($object_id, '/'.$object_id);
-    $crumbs->setActionList($revision_detail->getActionList());
 
     $prefs = $user->loadPreferences();
 
@@ -468,7 +461,6 @@ final class DifferentialRevisionViewController extends DifferentialController {
         false);
 
       $nav = id(new DifferentialChangesetFileTreeSideNavBuilder())
-        ->setAnchorName('top')
         ->setTitle('D'.$revision->getID())
         ->setBaseURI(new PhutilURI('/D'.$revision->getID()))
         ->setCollapsed((bool)$collapsed)

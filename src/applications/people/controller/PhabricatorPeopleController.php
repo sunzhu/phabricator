@@ -32,18 +32,19 @@ abstract class PhabricatorPeopleController extends PhabricatorController {
     return $this->buildSideNavView()->getMenu();
   }
 
-  public function buildApplicationCrumbs() {
+  protected function buildApplicationCrumbs() {
     $crumbs = parent::buildApplicationCrumbs();
 
     $viewer = $this->getRequest()->getUser();
 
-    if ($viewer->getIsAdmin()) {
-      $crumbs->addAction(
-        id(new PHUIListItemView())
-          ->setName(pht('Create New User'))
-          ->setHref($this->getApplicationURI('create/'))
-          ->setIcon('fa-plus-square'));
-    }
+    $can_create = $this->hasApplicationCapability(
+      PeopleCreateUsersCapability::CAPABILITY);
+    $crumbs->addAction(
+      id(new PHUIListItemView())
+      ->setName(pht('Create New User'))
+      ->setHref($this->getApplicationURI('create/'))
+      ->setDisabled(!$can_create)
+      ->setIcon('fa-plus-square'));
 
     return $crumbs;
   }

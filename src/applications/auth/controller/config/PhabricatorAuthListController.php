@@ -49,12 +49,15 @@ final class PhabricatorAuthListController
         $item->addAttribute(pht('Allows Registration'));
       }
 
+      $can_manage = $this->hasApplicationCapability(
+        AuthManageProvidersCapability::CAPABILITY);
       if ($config->getIsEnabled()) {
         $item->setBarColor('green');
         $item->addAction(
           id(new PHUIListItemView())
             ->setIcon('fa-times')
             ->setHref($disable_uri)
+            ->setDisabled(!$can_manage)
             ->addSigil('workflow'));
       } else {
         $item->setBarColor('grey');
@@ -63,6 +66,7 @@ final class PhabricatorAuthListController
           id(new PHUIListItemView())
             ->setIcon('fa-plus')
             ->setHref($enable_uri)
+            ->setDisabled(!$can_manage)
             ->addSigil('workflow'));
       }
 
@@ -86,6 +90,7 @@ final class PhabricatorAuthListController
           pht('Add Authentication Provider'))));
 
     $crumbs = $this->buildApplicationCrumbs();
+    $crumbs->setBorder(true);
     $crumbs->addTextCrumb(pht('Auth Providers'));
 
     $config_name = 'auth.email-domains';

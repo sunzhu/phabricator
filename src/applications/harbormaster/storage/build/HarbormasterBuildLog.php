@@ -27,7 +27,7 @@ final class HarbormasterBuildLog extends HarbormasterDAO
       ->setLive(0);
   }
 
-  public function getConfiguration() {
+  protected function getConfiguration() {
     return array(
       self::CONFIG_AUX_PHID => true,
       self::CONFIG_COLUMN_SCHEMA => array(
@@ -123,7 +123,7 @@ final class HarbormasterBuildLog extends HarbormasterDAO
         'INSERT INTO harbormaster_buildlogchunk '.
         '(logID, encoding, size, chunk) '.
         'VALUES '.
-        '(%d, %s, %d, %s)',
+        '(%d, %s, %d, %B)',
         $this->getID(),
         self::ENCODING_TEXT,
         strlen($content),
