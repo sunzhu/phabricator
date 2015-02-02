@@ -43,6 +43,7 @@ final class PhortuneSubscriptionProduct
   }
 
   public function getPriceAsCurrency(PhortuneProduct $product) {
+    // Prices are calculated by the SubscriptionImplementation.
     return PhortuneCurrency::newEmptyCurrency();
   }
 
@@ -59,6 +60,22 @@ final class PhortuneSubscriptionProduct
     PhortuneCurrency $amount) {
     // TODO: Callback the subscription.
     return;
+  }
+
+  public function getPurchaseName(
+    PhortuneProduct $product,
+    PhortunePurchase $purchase) {
+    return $this->getSubscription()->getPurchaseName(
+      $product,
+      $purchase);
+  }
+
+  public function getPurchaseURI(
+    PhortuneProduct $product,
+    PhortunePurchase $purchase) {
+    return $this->getSubscription()->getPurchaseURI(
+      $product,
+      $purchase);
   }
 
   public function loadImplementationsForRefs(

@@ -42,21 +42,101 @@ final class PhortuneSubscriptionWorker extends PhabricatorWorker {
 
     $purchase = $cart->newPurchase($actor, $product);
 
-    // TODO: Consider allowing subscriptions to cost an amount other than one
-    // dollar and twenty-three cents.
-    $currency = PhortuneCurrency::newFromUserInput($actor, '1.23 USD');
+    $currency = $subscription->getCostForBillingPeriodAsCurrency(
+      $last_epoch,
+      $next_epoch);
 
     $purchase
       ->setBasePriceAsCurrency($currency)
       ->setMetadataValue('subscriptionPHID', $subscription->getPHID())
+      ->setMetadataValue('epoch.start', $last_epoch)
+      ->setMetadataValue('epoch.end', $next_epoch)
       ->save();
 
     $cart->setSubscriptionPHID($subscription->getPHID());
     $cart->activateCart();
 
-    // TODO: Autocharge this, etc.; this is still mostly faked up.
-    echo 'Okay, made a cart here: ';
-    echo $cart->getCheckoutURI()."\n\n";
+    try {
+      $issues = $this->chargeSubscription($actor, $subscription, $cart);
+    } catch (Exception $ex) {
+      $issues = array(
+        pht(
+          'There was a technical error while trying to automatically bill '.
+          'this subscription: %s',
+          $ex),
+      );
+    }
+
+    if (!$issues) {
+      // We're all done; charging the cart sends a billing email as a side
+      // effect.
+      return;
+    }
+
+    // We're shoving this through the CartEditor because it has all the logic
+    // for sending mail about carts. This doesn't really affect the state of
+    // the cart, but reduces the amount of code duplication.
+
+    $xactions = array();
+    $xactions[] = id(new PhortuneCartTransaction())
+      ->setTransactionType(PhortuneCartTransaction::TYPE_INVOICED)
+      ->setNewValue(true);
+
+    $content_source = PhabricatorContentSource::newForSource(
+      PhabricatorContentSource::SOURCE_PHORTUNE,
+      array());
+
+    $acting_phid = id(new PhabricatorPhortuneApplication())->getPHID();
+    $editor = id(new PhortuneCartEditor())
+      ->setActor($viewer)
+      ->setActingAsPHID($acting_phid)
+      ->setContentSource($content_source)
+      ->setContinueOnMissingFields(true)
+      ->setInvoiceIssues($issues)
+      ->applyTransactions($cart, $xactions);
+  }
+
+
+  private function chargeSubscription(
+    PhabricatorUser $viewer,
+    PhortuneSubscription $subscription,
+    PhortuneCart $cart) {
+
+    $issues = array();
+    if (!$subscription->getDefaultPaymentMethodPHID()) {
+      $issues[] = pht(
+        'There is no payment method associated with this subscription, so '.
+        'it could not be billed automatically. Add a default payment method '.
+        'to enable automatic billing.');
+      return $issues;
+    }
+
+    $method = id(new PhortunePaymentMethodQuery())
+      ->setViewer($viewer)
+      ->withPHIDs(array($subscription->getDefaultPaymentMethodPHID()))
+      ->executeOne();
+    if (!$method) {
+      $issues[] = pht(
+        'The payment method associated with this subscription is invalid '.
+        'or out of date, so it could not be automatically billed. Update '.
+        'the default payment method to enable automatic billing.');
+      return $issues;
+    }
+
+    $provider = $method->buildPaymentProvider();
+    $charge = $cart->willApplyCharge($viewer, $provider, $method);
+
+    try {
+      $provider->applyCharge($method, $charge);
+    } catch (Exception $ex) {
+      $cart->didFailCharge($charge);
+      $issues[] = pht(
+        'Automatic billing failed: %s',
+        $ex->getMessage());
+      return $issues;
+    }
+
+    $cart->didApplyCharge($charge);
   }
 
 
