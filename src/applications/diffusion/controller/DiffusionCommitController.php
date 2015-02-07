@@ -52,7 +52,7 @@ final class DiffusionCommitController extends DiffusionController {
         return new Aphront404Response();
       }
 
-      $error = id(new AphrontErrorView())
+      $error = id(new PHUIErrorView())
         ->setTitle(pht('Commit Still Parsing'))
         ->appendChild(
           pht(
@@ -79,9 +79,9 @@ final class DiffusionCommitController extends DiffusionController {
     if ($is_foreign) {
       $subpath = $commit_data->getCommitDetail('svn-subpath');
 
-      $error_panel = new AphrontErrorView();
+      $error_panel = new PHUIErrorView();
       $error_panel->setTitle(pht('Commit Not Tracked'));
-      $error_panel->setSeverity(AphrontErrorView::SEVERITY_WARNING);
+      $error_panel->setSeverity(PHUIErrorView::SEVERITY_WARNING);
       $error_panel->appendChild(
         pht("This Diffusion repository is configured to track only one ".
         "subdirectory of the entire Subversion repository, and this commit ".
@@ -251,8 +251,8 @@ final class DiffusionCommitController extends DiffusionController {
           ->setTag('a')
           ->setIcon($icon);
 
-        $warning_view = id(new AphrontErrorView())
-          ->setSeverity(AphrontErrorView::SEVERITY_WARNING)
+        $warning_view = id(new PHUIErrorView())
+          ->setSeverity(PHUIErrorView::SEVERITY_WARNING)
           ->setTitle('Very Large Commit')
           ->appendChild(
             pht('This commit is very large. Load each file individually.'));
@@ -873,21 +873,23 @@ final class DiffusionCommitController extends DiffusionController {
 
   private function buildMergesTable(PhabricatorRepositoryCommit $commit) {
     $drequest = $this->getDiffusionRequest();
+    $repository = $drequest->getRepository();
+
+    $vcs = $repository->getVersionControlSystem();
+    switch ($vcs) {
+      case PhabricatorRepositoryType::REPOSITORY_TYPE_SVN:
+        // These aren't supported under SVN.
+        return null;
+    }
+
     $limit = 50;
 
-    $merges = array();
-    try {
-      $merges = $this->callConduitWithDiffusionRequest(
-        'diffusion.mergedcommitsquery',
-        array(
-          'commit' => $drequest->getCommit(),
-          'limit' => $limit + 1,
-        ));
-    } catch (ConduitException $ex) {
-      if ($ex->getMessage() != 'ERR-UNSUPPORTED-VCS') {
-        throw $ex;
-      }
-    }
+    $merges = $this->callConduitWithDiffusionRequest(
+      'diffusion.mergedcommitsquery',
+      array(
+        'commit' => $drequest->getCommit(),
+        'limit' => $limit + 1,
+      ));
 
     if (!$merges) {
       return null;
