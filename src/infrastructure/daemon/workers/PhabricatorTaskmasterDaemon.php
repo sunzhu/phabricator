@@ -3,13 +3,14 @@
 final class PhabricatorTaskmasterDaemon extends PhabricatorDaemon {
 
   protected function run() {
-    $sleep = 0;
     do {
       $tasks = id(new PhabricatorWorkerLeaseQuery())
         ->setLimit(1)
         ->execute();
 
       if ($tasks) {
+        $this->willBeginWork();
+
         foreach ($tasks as $task) {
           $id = $task->getID();
           $class = $task->getTaskClass();
@@ -40,7 +41,11 @@ final class PhabricatorTaskmasterDaemon extends PhabricatorDaemon {
 
         $sleep = 0;
       } else {
-        $sleep = min($sleep + 1, 30);
+        // When there's no work, sleep for one second. The pool will
+        // autoscale down if we're continuously idle for an extended period
+        // of time.
+        $this->willBeginIdle();
+        $sleep = 1;
       }
 
       $this->sleep($sleep);

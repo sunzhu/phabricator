@@ -34,6 +34,7 @@ final class PhabricatorConpherenceApplication extends PhabricatorApplication {
         ''                         => 'ConpherenceListController',
         'thread/(?P<id>[1-9]\d*)/' => 'ConpherenceListController',
         '(?P<id>[1-9]\d*)/'        => 'ConpherenceViewController',
+        'columnview/'              => 'ConpherenceColumnViewController',
         'new/'                     => 'ConpherenceNewController',
         'panel/'                   => 'ConpherenceNotificationPanelController',
         'widget/(?P<id>[1-9]\d*)/' => 'ConpherenceWidgetController',
@@ -53,6 +54,12 @@ final class PhabricatorConpherenceApplication extends PhabricatorApplication {
     $items[] = $item;
 
     return $items;
+  }
+
+  public function getQuicksandURIPatternBlacklist() {
+    return array(
+      '/conpherence/.*',
+    );
   }
 
 }

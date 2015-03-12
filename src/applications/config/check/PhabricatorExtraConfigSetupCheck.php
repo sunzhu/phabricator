@@ -2,6 +2,10 @@
 
 final class PhabricatorExtraConfigSetupCheck extends PhabricatorSetupCheck {
 
+  public function getDefaultGroup() {
+    return self::GROUP_OTHER;
+  }
+
   protected function executeChecks() {
     $ancient_config = self::getAncientConfig();
 
@@ -199,6 +203,14 @@ final class PhabricatorExtraConfigSetupCheck extends PhabricatorSetupCheck {
         'the server as the user you want it to run under.'),
       'notification.debug' => pht(
         'Notifications no longer have a dedicated debugging mode.'),
+      'translation.provider' => pht(
+        'The translation implementation has changed and providers are no '.
+        'longer used or supported.'),
+      'config.mask' => pht(
+        'Use `config.hide` instead of this option.'),
+      'phd.start-taskmasters' => pht(
+        'Taskmasters now use an autoscaling pool. You can configure the '.
+        'pool size with `phd.taskmasters`.'),
     );
 
     return $ancient_config;

@@ -15,6 +15,10 @@ final class PhabricatorSecurityConfigOptions
     return 'fa-lock';
   }
 
+  public function getGroup() {
+    return 'core';
+  }
+
   public function getOptions() {
     $support_href = PhabricatorEnv::getDoclink('Give Feedback! Get Support!');
 
@@ -41,8 +45,7 @@ final class PhabricatorSecurityConfigOptions
         'security.hmac-key',
         'string',
         '[D\t~Y7eNmnQGJ;rnH6aF;m2!vJ8@v8C=Cs:aQS\.Qw')
-        ->setMasked(true)
-        ->setLocked(true)
+        ->setHidden(true)
         ->setSummary(
           pht('Key for HMAC digests.'))
         ->setDescription(
@@ -100,8 +103,7 @@ final class PhabricatorSecurityConfigOptions
         'phabricator.csrf-key',
         'string',
         '0b7ec0592e0a2829d8b71df2fa269b2c6172eca3')
-        ->setMasked(true)
-        ->setLocked(true)
+        ->setHidden(true)
         ->setSummary(
           pht('Hashed with other inputs to generate CSRF tokens.'))
         ->setDescription(
@@ -116,8 +118,7 @@ final class PhabricatorSecurityConfigOptions
          'phabricator.mail-key',
          'string',
          '5ce3e7e8787f6e40dfae861da315a5cdf1018f12')
-        ->setMasked(true)
-        ->setLocked(true)
+        ->setHidden(true)
         ->setSummary(
           pht('Hashed with other inputs to generate mail tokens.'))
         ->setDescription(
@@ -222,6 +223,26 @@ final class PhabricatorSecurityConfigOptions
             pht(
               'If you enable this, you are allowing Phabricator to '.
               'potentially make requests to external servers.')),
+        $this->newOption('security.strict-transport-security', 'bool', false)
+          ->setLocked(true)
+          ->setBoolOptions(
+            array(
+              pht('Use HSTS'),
+              pht('Do Not Use HSTS'),
+            ))
+          ->setSummary(pht('Enable HTTP Strict Transport Security (HSTS).'))
+          ->setDescription(
+            pht(
+              'HTTP Strict Transport Security (HSTS) sends a header which '.
+              'instructs browsers that the site should only be accessed '.
+              'over HTTPS, never HTTP. This defuses an attack where an '.
+              'adversary gains access to your network, then proxies requests '.
+              'through an unsecured link.'.
+              "\n\n".
+              'Do not enable this option if you serve (or plan to ever serve) '.
+              'unsecured content over plain HTTP. It is very difficult to '.
+              'undo this change once users\' browsers have accepted the '.
+              'setting.')),
         $this->newOption('security.allow-conduit-act-as-user', 'bool', false)
           ->setBoolOptions(
             array(

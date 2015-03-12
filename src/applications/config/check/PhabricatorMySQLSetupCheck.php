@@ -2,6 +2,10 @@
 
 final class PhabricatorMySQLSetupCheck extends PhabricatorSetupCheck {
 
+  public function getDefaultGroup() {
+    return self::GROUP_MYSQL;
+  }
+
   public static function loadRawConfigValue($key) {
     $conn_raw = id(new PhabricatorUser())->establishConnection('w');
 
@@ -309,6 +313,26 @@ final class PhabricatorMySQLSetupCheck extends PhabricatorSetupCheck {
         ->setSummary($summary)
         ->setMessage($message)
         ->addMySQLConfig('innodb_buffer_pool_size');
+    }
+
+    $ok = PhabricatorStorageManagementAPI::isCharacterSetAvailableOnConnection(
+      'utf8mb4',
+      id(new PhabricatorUser())->establishConnection('w'));
+    if (!$ok) {
+      $summary = pht(
+        'You are using an old version of MySQL, and should upgrade.');
+
+      $message = pht(
+        'You are using an old version of MySQL which has poor unicode '.
+        'support (it does not support the "utf8mb4" collation set). You will '.
+        'encounter limitations when working with some unicode data.'.
+        "\n\n".
+        'We strongly recommend you upgrade to MySQL 5.5 or newer.');
+
+      $this->newIssue('mysql.utf8mb4')
+        ->setName(pht('Old MySQL Version'))
+        ->setSummary($summary)
+        ->setMessage($message);
     }
 
   }

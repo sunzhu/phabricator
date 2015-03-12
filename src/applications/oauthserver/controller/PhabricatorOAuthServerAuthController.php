@@ -182,6 +182,12 @@ final class PhabricatorOAuthServerAuthController
           'state' => $state,
         ));
 
+      if ($client->getIsTrusted()) {
+        return id(new AphrontRedirectResponse())
+          ->setIsExternal(true)
+          ->setURI((string)$full_uri);
+      }
+
       // TODO: It would be nice to give the user more options here, like
       // reviewing permissions, canceling the authorization, or aborting
       // the workflow.
@@ -238,7 +244,8 @@ final class PhabricatorOAuthServerAuthController
       ->appendParagraph(
         pht(
           'Do you want to authorize the external application "%s" to '.
-          'access your Phabricator account data?',
+          'access your Phabricator account data, including your primary '.
+          'email address?',
           phutil_tag('strong', array(), $name)))
       ->appendChild($form->buildLayoutView())
       ->addSubmitButton(pht('Authorize Access'))

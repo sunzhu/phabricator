@@ -135,8 +135,13 @@ final class PhabricatorAuditEditor
       case PhabricatorTransactions::TYPE_SUBSCRIBERS:
       case PhabricatorTransactions::TYPE_EDGE:
       case PhabricatorAuditActionConstants::ACTION:
-      case PhabricatorAuditActionConstants::INLINE:
       case PhabricatorAuditTransaction::TYPE_COMMIT:
+        return;
+      case PhabricatorAuditActionConstants::INLINE:
+        $reply = $xaction->getComment()->getReplyToComment();
+        if ($reply && !$reply->getHasReplies()) {
+          $reply->setHasReplies(1)->save();
+        }
         return;
       case PhabricatorAuditActionConstants::ADD_AUDITORS:
         $new = $xaction->getNewValue();
@@ -519,20 +524,6 @@ final class PhabricatorAuditEditor
   }
 
 
-  protected function shouldSendMail(
-    PhabricatorLiskDAO $object,
-    array $xactions) {
-
-    // not every code path loads the repository so tread carefully
-    if ($object->getRepository($assert_attached = false)) {
-      $repository = $object->getRepository();
-      if ($repository->isImporting()) {
-        return false;
-      }
-    }
-    return $this->isCommitMostlyImported($object);
-  }
-
   protected function buildReplyHandler(PhabricatorLiskDAO $object) {
     $reply_handler = PhabricatorEnv::newObjectFromConfig(
       'metamta.diffusion.reply-handler');
@@ -806,14 +797,6 @@ final class PhabricatorAuditEditor
     );
   }
 
-
-
-  protected function shouldPublishFeedStory(
-    PhabricatorLiskDAO $object,
-    array $xactions) {
-    return $this->shouldSendMail($object, $xactions);
-  }
-
   protected function shouldApplyHeraldRules(
     PhabricatorLiskDAO $object,
     array $xactions) {
@@ -822,10 +805,7 @@ final class PhabricatorAuditEditor
       switch ($xaction->getTransactionType()) {
         case PhabricatorAuditTransaction::TYPE_COMMIT:
           $repository = $object->getRepository();
-          if ($repository->isImporting()) {
-            return false;
-          }
-          if ($repository->getDetail('herald-disabled')) {
+          if (!$repository->shouldPublish()) {
             return false;
           }
           return true;
@@ -915,6 +895,41 @@ final class PhabricatorAuditEditor
     $mask = ($has_message | $has_changes);
 
     return $object->isPartiallyImported($mask);
+  }
+
+
+  private function shouldPublishRepositoryActivity(
+    PhabricatorLiskDAO $object,
+    array $xactions) {
+
+    // not every code path loads the repository so tread carefully
+    // TODO: They should, and then we should simplify this.
+    if ($object->getRepository($assert_attached = false)) {
+      $repository = $object->getRepository();
+      if (!$repository->shouldPublish()) {
+        return false;
+      }
+    }
+
+    return $this->isCommitMostlyImported($object);
+  }
+
+  protected function shouldSendMail(
+    PhabricatorLiskDAO $object,
+    array $xactions) {
+    return $this->shouldPublishRepositoryActivity($object, $xactions);
+  }
+
+  protected function shouldEnableMentions(
+    PhabricatorLiskDAO $object,
+    array $xactions) {
+    return $this->shouldPublishRepositoryActivity($object, $xactions);
+  }
+
+  protected function shouldPublishFeedStory(
+    PhabricatorLiskDAO $object,
+    array $xactions) {
+    return $this->shouldPublishRepositoryActivity($object, $xactions);
   }
 
 }
