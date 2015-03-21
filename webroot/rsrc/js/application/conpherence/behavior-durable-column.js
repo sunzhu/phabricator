@@ -3,6 +3,7 @@
  * @requires javelin-behavior
  *           javelin-dom
  *           javelin-stratcom
+ *           javelin-behavior-device
  *           javelin-scrollbar
  *           javelin-quicksand
  *           phabricator-keyboard-shortcut
@@ -27,7 +28,6 @@ JX.behavior('durable-column', function(config, statics) {
   var loadThreadID = null;
   var scrollbar = null;
 
-  var frame = JX.$('phabricator-standard-page');
   var quick = JX.$('phabricator-standard-page-body');
 
   function _getColumnNode() {
@@ -40,9 +40,16 @@ JX.behavior('durable-column', function(config, statics) {
   }
 
   function _toggleColumn(explicit) {
+    if (explicit) {
+      var device = JX.Device.getDevice();
+      // don't allow users to invoke the column from devices
+      if (device != 'desktop') {
+        return;
+      }
+    }
     show = !show;
-    JX.DOM.alterClass(frame, 'with-durable-column', show);
-    var column = JX.$('conpherence-durable-column');
+    JX.DOM.alterClass(document.body, 'with-durable-column', show);
+    var column = _getColumnNode();
     if (show) {
       JX.DOM.show(column);
       threadManager.loadThreadByID(loadThreadID);
@@ -95,26 +102,25 @@ JX.behavior('durable-column', function(config, statics) {
     JX.DOM.appendContent(messages, JX.$H(r.transactions));
     scrollbar.scrollTo(messages.scrollHeight);
   });
+
   threadManager.setWillSendMessageCallback(function() {
-    _markLoading(true);
+    // Wipe the textarea immediately so the user can start typing more text.
+    var textarea = _getColumnTextareaNode();
+    textarea.value = '';
+    _focusColumnTextareaNode();
   });
+
   threadManager.setDidSendMessageCallback(function(r) {
     var messages = _getColumnMessagesNode();
     JX.DOM.appendContent(messages, JX.$H(r.transactions));
     scrollbar.scrollTo(messages.scrollHeight);
-
-    var textarea = _getColumnTextareaNode();
-    textarea.value = '';
-
-    _markLoading(false);
-
-    _focusColumnTextareaNode();
   });
+
   threadManager.setWillUpdateWorkflowCallback(function() {
     JX.Stratcom.invoke('notification-panel-close');
   });
   threadManager.setDidUpdateWorkflowCallback(function(r) {
-    var messages = this._getMessagesNode();
+    var messages = _getColumnMessagesNode();
     JX.DOM.appendContent(messages, JX.$H(r.transactions));
     scrollbar.scrollTo(messages.scrollHeight);
     JX.DOM.setContent(_getColumnTitleNode(), r.conpherence_title);
@@ -179,6 +185,33 @@ JX.behavior('durable-column', function(config, statics) {
       }
       JX.DOM.setContent(_getColumnTitleNode(), data.threadTitle);
       threadManager.loadThreadByID(data.threadID);
+    });
+
+  var resizeClose = false;
+  JX.Stratcom.listen(
+    'phabricator-device-change',
+    null,
+    function() {
+      var device = JX.Device.getDevice();
+      switch (device) {
+        case 'phone':
+        case 'tablet':
+          if (show === true) {
+            _toggleColumn(false);
+            resizeClose = true;
+          }
+          break;
+        case 'desktop':
+          if (resizeClose) {
+            resizeClose = false;
+            if (show === false) {
+              _toggleColumn(false);
+            }
+          }
+          break;
+        default:
+          break;
+      }
     });
 
   function _getColumnBodyNode() {
@@ -247,6 +280,35 @@ JX.behavior('durable-column', function(config, statics) {
     'conpherence-message-form',
     _sendMessage);
 
+  // Send on enter if the shift key is not held.
+  JX.Stratcom.listen(
+    'keydown',
+    'conpherence-message-form',
+    function(e) {
+      if (e.getSpecialKey() != 'return') {
+        return;
+      }
+
+      var raw = e.getRawEvent();
+      if (raw.shiftKey) {
+        // If the shift key is pressed, let the browser write a newline into
+        // the textarea.
+        return;
+      }
+
+      // From here on, interpret this as a "send" action, not a literal
+      // newline.
+      e.kill();
+
+      var textarea = _getColumnTextareaNode();
+      if (!textarea.value.length) {
+        // If there's no text, don't try to submit the form.
+        return;
+      }
+
+      _sendMessage(e);
+    });
+
   JX.Stratcom.listen(
     ['keydown'],
     'conpherence-durable-column-textarea',
@@ -254,8 +316,38 @@ JX.behavior('durable-column', function(config, statics) {
       threadManager.handleDraftKeydown(e);
     });
 
+  // HTML5 placeholders are rendered as long as the input is empty, even if the
+  // input is currently focused. This is undesirable for the chat input,
+  // especially immediately after sending a message. Hide the placeholder while
+  // the input is focused.
+  JX.Stratcom.listen(
+    ['focus', 'blur'],
+    'conpherence-durable-column-textarea',
+    function (e) {
+      var node = e.getTarget();
+      if (e.getType() == 'focus') {
+        if (node.placeholder) {
+          node.placeholderStorage = node.placeholder;
+          node.placeholder = '';
+        }
+      } else {
+        if (node.placeholderStorage) {
+          node.placeholder = node.placeholderStorage;
+          node.placeholderStorage = '';
+        }
+      }
+    });
+
   if (config.visible) {
-    _toggleColumn(false);
+    var device = JX.Device.getDevice();
+    if (device == 'desktop') {
+      _toggleColumn(false);
+    } else {
+      // pretend we closed due to resize so if we do resize later things work
+      // correctly
+      resizeClose = true;
+      JX.DOM.hide(_getColumnNode());
+    }
   }
 
 });

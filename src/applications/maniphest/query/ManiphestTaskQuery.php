@@ -21,6 +21,7 @@ final class ManiphestTaskQuery extends PhabricatorCursorPagedPolicyAwareQuery {
   private $dateCreatedBefore;
   private $dateModifiedAfter;
   private $dateModifiedBefore;
+  private $reversePaging;
 
   private $fullTextSearch   = '';
 
@@ -765,12 +766,12 @@ final class ManiphestTaskQuery extends PhabricatorCursorPagedPolicyAwareQuery {
       foreach ($app_order as $order_by) {
         $order[] = $order_by;
       }
+    }
 
-      if ($reverse) {
-        $order[] = 'task.id ASC';
-      } else {
-        $order[] = 'task.id DESC';
-      }
+    if ($reverse) {
+      $order[] = 'task.id ASC';
+    } else {
+      $order[] = 'task.id DESC';
     }
 
     return 'ORDER BY '.implode(', ', $order);
@@ -979,7 +980,9 @@ final class ManiphestTaskQuery extends PhabricatorCursorPagedPolicyAwareQuery {
 
     $cursor = $this->loadCursorObject($task_id);
     if (!$cursor) {
-      return null;
+      // We may loop if we have a cursor and don't build a paging clause; fail
+      // instead.
+      throw new PhabricatorEmptyQueryException();
     }
 
     $columns = array();
@@ -1052,11 +1055,6 @@ final class ManiphestTaskQuery extends PhabricatorCursorPagedPolicyAwareQuery {
     $app_columns = $this->buildApplicationSearchPagination($conn_r, $cursor);
     if ($app_columns) {
       $columns = array_merge($columns, $app_columns);
-      $columns[] = array(
-        'name' => 'task.id',
-        'value' => (int)$cursor->getID(),
-        'type' => 'int',
-      );
     } else {
       switch ($this->orderBy) {
         case self::ORDER_PRIORITY:
@@ -1069,9 +1067,8 @@ final class ManiphestTaskQuery extends PhabricatorCursorPagedPolicyAwareQuery {
           }
           $columns[] = array(
             'name' => 'task.subpriority',
-            'value' => (int)$cursor->getSubpriority(),
-            'type' => 'int',
-            'reverse' => true,
+            'value' => $cursor->getSubpriority(),
+            'type' => 'float',
           );
           $columns[] = array(
             'name' => 'task.dateModified',
@@ -1080,11 +1077,7 @@ final class ManiphestTaskQuery extends PhabricatorCursorPagedPolicyAwareQuery {
           );
           break;
         case self::ORDER_CREATED:
-          $columns[] = array(
-            'name' => 'task.id',
-            'value' => (int)$cursor->getID(),
-            'type' => 'int',
-          );
+          // This just uses the ID column, below.
           break;
         case self::ORDER_MODIFIED:
           $columns[] = array(
@@ -1099,16 +1092,17 @@ final class ManiphestTaskQuery extends PhabricatorCursorPagedPolicyAwareQuery {
             'value' => $cursor->getTitle(),
             'type' => 'string',
           );
-          $columns[] = array(
-            'name' => 'task.id',
-            'value' => $cursor->getID(),
-            'type' => 'int',
-          );
           break;
         default:
           throw new Exception("Unknown order query '{$this->orderBy}'!");
       }
     }
+
+    $columns[] = array(
+      'name' => 'task.id',
+      'value' => $cursor->getID(),
+      'type' => 'int',
+    );
 
     return $this->buildPagingClauseFromMultipleColumns(
       $conn_r,
@@ -1124,6 +1118,15 @@ final class ManiphestTaskQuery extends PhabricatorCursorPagedPolicyAwareQuery {
 
   public function getQueryApplicationClass() {
     return 'PhabricatorManiphestApplication';
+  }
+
+  public function setReversePaging($reverse_paging) {
+    $this->reversePaging = $reverse_paging;
+    return $this;
+  }
+
+  protected function getReversePaging() {
+    return $this->reversePaging;
   }
 
 }
