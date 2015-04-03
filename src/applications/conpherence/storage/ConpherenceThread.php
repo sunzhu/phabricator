@@ -1,7 +1,9 @@
 <?php
 
 final class ConpherenceThread extends ConpherenceDAO
-  implements PhabricatorPolicyInterface {
+  implements
+    PhabricatorPolicyInterface,
+    PhabricatorApplicationTransactionInterface {
 
   protected $title;
   protected $isRoom = 0;
@@ -31,6 +33,7 @@ final class ConpherenceThread extends ConpherenceDAO
   }
 
   public static function initializeNewRoom(PhabricatorUser $creator) {
+
     return id(new ConpherenceThread())
       ->setIsRoom(1)
       ->setMessageCount(0)
@@ -79,6 +82,10 @@ final class ConpherenceThread extends ConpherenceDAO
     return parent::save();
   }
 
+  public function getMonogram() {
+    return 'Z'.$this->getID();
+  }
+
   public function attachParticipants(array $participants) {
     assert_instances_of($participants, 'ConpherenceParticipant');
     $this->participants = $participants;
@@ -91,6 +98,11 @@ final class ConpherenceThread extends ConpherenceDAO
     $participants = $this->getParticipants();
     return $participants[$phid];
   }
+  public function getParticipantIfExists($phid, $default = null) {
+    $participants = $this->getParticipants();
+    return idx($participants, $phid, $default);
+  }
+
   public function getParticipantPHIDs() {
     $participants = $this->getParticipants();
     return array_keys($participants);
@@ -164,11 +176,10 @@ final class ConpherenceThread extends ConpherenceDAO
     }
 
     $title = $js_title = $this->getTitle();
-    if (!$title) {
-      $title = $lucky_handle->getName();
-      $js_title = pht('[No Title]');
+    $img_src = null;
+    if ($lucky_handle) {
+      $img_src = $lucky_handle->getImageURI();
     }
-    $img_src = $lucky_handle->getImageURI();
 
     $count = 0;
     $final = false;
@@ -190,11 +201,17 @@ final class ConpherenceThread extends ConpherenceDAO
       $count++;
       $final = $count == 3;
     }
+    if (!$title) {
+      $title = $js_title = $subtitle;
+    }
 
-    $participants = $this->getParticipants();
-    $user_participation = $participants[$user->getPHID()];
-    $unread_count = $this->getMessageCount() -
-      $user_participation->getSeenMessageCount();
+    $user_participation = $this->getParticipantIfExists($user->getPHID());
+    if ($user_participation) {
+      $user_seen_count = $user_participation->getSeenMessageCount();
+    } else {
+      $user_seen_count = 0;
+    }
+    $unread_count = $this->getMessageCount() - $user_seen_count;
 
     return array(
       'title' => $title,
@@ -206,7 +223,10 @@ final class ConpherenceThread extends ConpherenceDAO
     );
   }
 
+
 /* -(  PhabricatorPolicyInterface Implementation  )-------------------------- */
+
+
   public function getCapabilities() {
     return array(
       PhabricatorPolicyCapability::CAN_VIEW,
@@ -248,7 +268,74 @@ final class ConpherenceThread extends ConpherenceDAO
   }
 
   public function describeAutomaticCapability($capability) {
-    return pht('Participants in a thread can always view and edit it.');
+    if ($this->getIsRoom()) {
+      switch ($capability) {
+        case PhabricatorPolicyCapability::CAN_VIEW:
+          return pht('Participants in a room can always view it.');
+          break;
+      }
+    } else {
+      return pht('Participants in a thread can always view and edit it.');
+    }
+  }
+
+  public static function loadPolicyObjects(
+    PhabricatorUser $viewer,
+    array $conpherences) {
+
+    assert_instances_of($conpherences, 'ConpherenceThread');
+
+    $grouped = mgroup($conpherences, 'getIsRoom');
+    $rooms = idx($grouped, 1, array());
+
+    $policies = array();
+    foreach ($rooms as $room) {
+      $policies[] = $room->getViewPolicy();
+    }
+    $policy_objects = array();
+    if ($policies) {
+      $policy_objects = id(new PhabricatorPolicyQuery())
+        ->setViewer($viewer)
+        ->withPHIDs($policies)
+        ->execute();
+    }
+
+    return $policy_objects;
+  }
+
+  public function getPolicyIconName(array $policy_objects) {
+    assert_instances_of($policy_objects, 'PhabricatorPolicy');
+
+    if ($this->getIsRoom()) {
+      $icon = $policy_objects[$this->getViewPolicy()]->getIcon();
+    } else if (count($this->getRecentParticipantPHIDs()) > 2) {
+      $icon = 'fa-users';
+    } else {
+      $icon = 'fa-user';
+    }
+    return $icon;
+  }
+
+
+/* -(  PhabricatorApplicationTransactionInterface  )------------------------- */
+
+
+  public function getApplicationTransactionEditor() {
+    return new ConpherenceEditor();
+  }
+
+  public function getApplicationTransactionObject() {
+    return $this;
+  }
+
+  public function getApplicationTransactionTemplate() {
+    return new ConpherenceTransaction();
+  }
+
+  public function willRenderTimeline(
+    PhabricatorApplicationTransactionView $timeline,
+    AphrontRequest $request) {
+    return $timeline;
   }
 
 }

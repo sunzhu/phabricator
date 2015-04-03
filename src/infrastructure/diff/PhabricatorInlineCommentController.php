@@ -6,7 +6,10 @@ abstract class PhabricatorInlineCommentController
   abstract protected function createComment();
   abstract protected function loadComment($id);
   abstract protected function loadCommentForEdit($id);
+  abstract protected function loadCommentForDone($id);
   abstract protected function loadCommentByPHID($phid);
+  abstract protected function loadObjectOwnerPHID(
+    PhabricatorInlineCommentInterface $inline);
   abstract protected function deleteComment(
     PhabricatorInlineCommentInterface $inline);
   abstract protected function saveComment(
@@ -81,6 +84,38 @@ abstract class PhabricatorInlineCommentController
 
     $op = $this->getOperation();
     switch ($op) {
+      case 'done':
+        if (!$request->validateCSRF()) {
+          return new Aphront404Response();
+        }
+        $inline = $this->loadCommentForDone($this->getCommentID());
+
+        $is_draft_state = false;
+        switch ($inline->getFixedState()) {
+          case PhabricatorInlineCommentInterface::STATE_DRAFT:
+            $next_state = PhabricatorInlineCommentInterface::STATE_UNDONE;
+            break;
+          case PhabricatorInlineCommentInterface::STATE_UNDRAFT:
+            $next_state = PhabricatorInlineCommentInterface::STATE_DONE;
+            break;
+          case PhabricatorInlineCommentInterface::STATE_DONE:
+            $next_state = PhabricatorInlineCommentInterface::STATE_UNDRAFT;
+            $is_draft_state = true;
+            break;
+          default:
+          case PhabricatorInlineCommentInterface::STATE_UNDONE:
+            $next_state = PhabricatorInlineCommentInterface::STATE_DRAFT;
+            $is_draft_state = true;
+            break;
+        }
+
+        $inline->setFixedState($next_state)->save();
+
+        return id(new AphrontAjaxResponse())
+          ->setContent(
+            array(
+              'draftState' => $is_draft_state,
+            ));
       case 'delete':
       case 'undelete':
       case 'refdelete':
@@ -280,13 +315,17 @@ abstract class PhabricatorInlineCommentController
     $phids = array($user->getPHID());
 
     $handles = $this->loadViewerHandles($phids);
+    $object_owner_phid = $this->loadObjectOwnerPHID($inline);
 
     $view = id(new PHUIDiffInlineCommentDetailView())
+      ->setUser($user)
       ->setInlineComment($inline)
       ->setIsOnRight($on_right)
       ->setMarkupEngine($engine)
       ->setHandles($handles)
-      ->setEditable(true);
+      ->setEditable(true)
+      ->setCanMarkDone(false)
+      ->setObjectOwnerPHID($object_owner_phid);
 
     $view = $this->buildScaffoldForView($view);
 

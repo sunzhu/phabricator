@@ -451,35 +451,115 @@ final class PhabricatorFile extends PhabricatorFileDAO
   }
 
 
+  /**
+   * Download a remote resource over HTTP and save the response body as a file.
+   *
+   * This method respects `security.outbound-blacklist`, and protects against
+   * HTTP redirection (by manually following "Location" headers and verifying
+   * each destination). It does not protect against DNS rebinding. See
+   * discussion in T6755.
+   */
   public static function newFromFileDownload($uri, array $params = array()) {
-    // Make sure we're allowed to make a request first
-    if (!PhabricatorEnv::getEnvConfig('security.allow-outbound-http')) {
-      throw new Exception('Outbound HTTP requests are disabled!');
-    }
-
-    $uri = new PhutilURI($uri);
-
-    $protocol = $uri->getProtocol();
-    switch ($protocol) {
-      case 'http':
-      case 'https':
-        break;
-      default:
-        // Make sure we are not accessing any file:// URIs or similar.
-        return null;
-    }
-
     $timeout = 5;
 
-    list($file_data) = id(new HTTPSFuture($uri))
-        ->setTimeout($timeout)
-        ->resolvex();
+    $redirects = array();
+    $current = $uri;
+    while (true) {
+      try {
+        if (count($redirects) > 10) {
+          throw new Exception(
+            pht('Too many redirects trying to fetch remote URI.'));
+        }
 
-    $params = $params + array(
-      'name' => basename($uri),
-    );
+        $resolved = PhabricatorEnv::requireValidRemoteURIForFetch(
+          $current,
+          array(
+            'http',
+            'https',
+          ));
 
-    return self::newFromFileData($file_data, $params);
+        list($resolved_uri, $resolved_domain) = $resolved;
+
+        $current = new PhutilURI($current);
+        if ($current->getProtocol() == 'http') {
+          // For HTTP, we can use a pre-resolved URI to defuse DNS rebinding.
+          $fetch_uri = $resolved_uri;
+          $fetch_host = $resolved_domain;
+        } else {
+          // For HTTPS, we can't: cURL won't verify the SSL certificate if
+          // the domain has been replaced with an IP. But internal services
+          // presumably will not have valid certificates for rebindable
+          // domain names on attacker-controlled domains, so the DNS rebinding
+          // attack should generally not be possible anyway.
+          $fetch_uri = $current;
+          $fetch_host = null;
+        }
+
+        $future = id(new HTTPSFuture($fetch_uri))
+          ->setFollowLocation(false)
+          ->setTimeout($timeout);
+
+        if ($fetch_host !== null) {
+          $future->addHeader('Host', $fetch_host);
+        }
+
+        list($status, $body, $headers) = $future->resolve();
+
+        if ($status->isRedirect()) {
+          // This is an HTTP 3XX status, so look for a "Location" header.
+          $location = null;
+          foreach ($headers as $header) {
+            list($name, $value) = $header;
+            if (phutil_utf8_strtolower($name) == 'location') {
+              $location = $value;
+              break;
+            }
+          }
+
+          // HTTP 3XX status with no "Location" header, just treat this like
+          // a normal HTTP error.
+          if ($location === null) {
+            throw $status;
+          }
+
+          if (isset($redirects[$location])) {
+            throw new Exception(
+              pht(
+                'Encountered loop while following redirects.'));
+          }
+
+          $redirects[$location] = $location;
+          $current = $location;
+          // We'll fall off the bottom and go try this URI now.
+        } else if ($status->isError()) {
+          // This is something other than an HTTP 2XX or HTTP 3XX status, so
+          // just bail out.
+          throw $status;
+        } else {
+          // This is HTTP 2XX, so use the the response body to save the
+          // file data.
+          $params = $params + array(
+            'name' => basename($uri),
+          );
+
+          return self::newFromFileData($body, $params);
+        }
+      } catch (Exception $ex) {
+        if ($redirects) {
+          throw new PhutilProxyException(
+            pht(
+              'Failed to fetch remote URI "%s" after following %s redirect(s) '.
+              '(%s): %s',
+              $uri,
+              new PhutilNumber(count($redirects)),
+              implode(' > ', array_keys($redirects)),
+              $ex->getMessage()),
+            $ex);
+        } else {
+          throw $ex;
+        }
+      }
+    }
   }
 
   public static function normalizeFileName($file_name) {

@@ -3,39 +3,41 @@
 final class DiffusionInlineCommentController
   extends PhabricatorInlineCommentController {
 
-  private $commitPHID;
+  private function getCommitPHID() {
+    return $this->getRequest()->getURIData('phid');
+  }
 
-  public function willProcessRequest(array $data) {
-    $this->commitPHID = $data['phid'];
+  private function loadCommit() {
+    $viewer = $this->getViewer();
+    $commit_phid = $this->getCommitPHID();
+
+    $commit = id(new DiffusionCommitQuery())
+      ->setViewer($viewer)
+      ->withPHIDs(array($commit_phid))
+      ->executeOne();
+    if (!$commit) {
+      throw new Exception(pht('Invalid commit PHID "%s"!', $commit_phid));
+    }
+
+    return $commit;
   }
 
   protected function createComment() {
-
-    // Verify commit and path correspond to actual objects.
-    $commit_phid = $this->commitPHID;
-    $path_id = $this->getChangesetID();
-
-    $commit = id(new PhabricatorRepositoryCommit())->loadOneWhere(
-      'phid = %s',
-      $commit_phid);
-    if (!$commit) {
-      throw new Exception('Invalid commit ID!');
-    }
+    $commit = $this->loadCommit();
 
     // TODO: Write a real PathQuery object?
-
+    $path_id = $this->getChangesetID();
     $path = queryfx_one(
       id(new PhabricatorRepository())->establishConnection('r'),
       'SELECT path FROM %T WHERE id = %d',
       PhabricatorRepository::TABLE_PATH,
       $path_id);
-
     if (!$path) {
       throw new Exception('Invalid path ID!');
     }
 
     return id(new PhabricatorAuditInlineComment())
-      ->setCommitPHID($commit_phid)
+      ->setCommitPHID($commit->getPHID())
       ->setPathID($path_id);
   }
 
@@ -58,6 +60,31 @@ final class DiffusionInlineCommentController
     return $inline;
   }
 
+  protected function loadCommentForDone($id) {
+    $request = $this->getRequest();
+    $viewer = $request->getUser();
+
+    $inline = $this->loadComment($id);
+    if (!$inline) {
+      throw new Exception(pht('Failed to load comment "%d".', $id));
+    }
+
+    $commit = id(new DiffusionCommitQuery())
+      ->setViewer($viewer)
+      ->withPHIDs(array($inline->getCommitPHID()))
+      ->executeOne();
+    if (!$commit) {
+      throw new Exception(pht('Failed to load commit.'));
+    }
+
+    if ((!$commit->getAuthorPHID()) ||
+        ($commit->getAuthorPHID() != $viewer->getPHID())) {
+      throw new Exception(pht('You can not mark this comment as complete.'));
+    }
+
+    return $inline;
+  }
+
   private function canEditInlineComment(
     PhabricatorUser $user,
     PhabricatorAuditInlineComment $inline) {
@@ -73,7 +100,7 @@ final class DiffusionInlineCommentController
     }
 
     // Inline must be attached to the active revision.
-    if ($inline->getCommitPHID() != $this->commitPHID) {
+    if ($inline->getCommitPHID() != $this->getCommitPHID()) {
       return false;
     }
 
@@ -87,5 +114,11 @@ final class DiffusionInlineCommentController
   protected function saveComment(PhabricatorInlineCommentInterface $inline) {
     return $inline->save();
   }
+
+  protected function loadObjectOwnerPHID(
+    PhabricatorInlineCommentInterface $inline) {
+    return $this->loadCommit()->getAuthorPHID();
+  }
+
 
 }

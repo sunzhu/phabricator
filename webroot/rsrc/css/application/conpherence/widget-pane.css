@@ -57,6 +57,10 @@
   border-top-color: #000;
 }
 
+.conpherence-widget-pane .widgets-header .phui-icon-view.disabled {
+  color: {$lightgreytext};
+}
+
 .device-desktop .conpherence-layout .device-widgets-selector {
   display: none;
 }
@@ -330,33 +334,45 @@
   padding: 3px 16px 4px 16px;
 }
 
+#widgets-people {
+  margin-top: 4px;
+}
+
 .conpherence-widget-pane .person-entry {
-  padding: 8px 0 0 8px;
+  padding: 4px 8px;
+}
+
+.conpherence-widget-pane .person-entry:hover {
+  background-color: {$lightgreybackground};
 }
 
 .conpherence-widget-pane .person-entry a {
   float: left;
   font-weight: bold;
-  line-height: 20px;
+  line-height: 22px;
+  color: {$darkbluetext};
 }
 
 .conpherence-widget-pane .person-entry a img {
-  height: 35px;
-  width: 35px;
+  height: 24px;
+  width: 24px;
+  border-radius: 3px;
 }
 
 .conpherence-widget-pane .person-entry .pic {
   float: left;
-  margin: 0 8px 0 0;
-  width: 35px;
-  padding: 0;
+  width: 30px;
 }
 
 .conpherence-widget-pane .person-entry .remove {
   float: right;
   width: 20px;
+  height: 20px;
   font-size: 18px;
-  padding: 5px 0 8px 0;
+}
+
+.person-entry .remove:hover .phui-icon-view {
+  color: {$red};
 }
 
 .conpherence-widget-pane .person-entry .remove:hover {
@@ -375,4 +391,16 @@
 .conpherence-widget-pane .title-update,
 .conpherence-widget-pane .notifications-update {
   margin: 3px 0px 0px 4px;
+}
+
+.conpherence-widget-pane .no-settings {
+  width: 200px;
+  padding: 20px;
+  text-align: center;
+  color: {$greytext};
+}
+
+.device .conpherence-widget-pane .no-settings {
+  width: 60px;
+  margin: 0 auto 0 auto;
 }

@@ -39,33 +39,57 @@ abstract class ConpherenceController extends PhabricatorController {
   }
 
   protected function buildApplicationCrumbs() {
+    return $this->buildConpherenceApplicationCrumbs();
+  }
+
+  protected function buildConpherenceApplicationCrumbs($is_rooms = false) {
     $crumbs = parent::buildApplicationCrumbs();
     $crumbs->setBorder(true);
 
-    $crumbs
-      ->addAction(
-        id(new PHUIListItemView())
-        ->setName(pht('New Message'))
-        ->setHref($this->getApplicationURI('new/'))
-        ->setIcon('fa-plus-square')
-        ->setWorkflow(true))
-      ->addAction(
-        id(new PHUIListItemView())
-        ->setName(pht('Thread'))
-        ->setHref('#')
-        ->setIcon('fa-bars')
-        ->setStyle('display: none;')
-        ->addClass('device-widgets-selector')
-        ->addSigil('device-widgets-selector'));
+    if ($is_rooms) {
+      $crumbs
+        ->addAction(
+          id(new PHUIListItemView())
+          ->setName(pht('New Room'))
+          ->setHref($this->getApplicationURI('room/new/'))
+          ->setIcon('fa-plus-square')
+          ->setWorkflow(true));
+    } else {
+      $crumbs
+        ->addAction(
+          id(new PHUIListItemView())
+          ->setName(pht('New Message'))
+          ->setHref($this->getApplicationURI('new/'))
+          ->setIcon('fa-plus-square')
+          ->setWorkflow(true))
+        ->addAction(
+          id(new PHUIListItemView())
+          ->setName(pht('Thread'))
+          ->setHref('#')
+          ->setIcon('fa-bars')
+          ->setStyle('display: none;')
+          ->addClass('device-widgets-selector')
+          ->addSigil('device-widgets-selector'));
+    }
     return $crumbs;
   }
 
-  protected function buildHeaderPaneContent(ConpherenceThread $conpherence) {
+  protected function buildHeaderPaneContent(
+    ConpherenceThread $conpherence,
+    array $policy_objects) {
+    assert_instances_of($policy_objects, 'PhabricatorPolicy');
+
     $crumbs = $this->buildApplicationCrumbs();
-    $title = $this->getConpherenceTitle($conpherence);
+    $data = $conpherence->getDisplayData($this->getViewer());
+    if ($conpherence->getID() && $conpherence->getIsRoom()) {
+      $icon = $conpherence->getPolicyIconName($policy_objects);
+    } else {
+      $icon = null;
+    }
     $crumbs->addCrumb(
       id(new PHUICrumbView())
-      ->setName($title)
+      ->setIcon($icon)
+      ->setName($data['title'])
       ->setHref($this->getApplicationURI('update/'.$conpherence->getID().'/'))
       ->setWorkflow(true));
 
@@ -80,15 +104,6 @@ abstract class ConpherenceController extends PhabricatorController {
           ''),
         $crumbs,
       ));
-  }
-
-  protected function getConpherenceTitle(ConpherenceThread $conpherence) {
-    if ($conpherence->getTitle()) {
-      $title = $conpherence->getTitle();
-    } else {
-      $title = pht('[No Title]');
-    }
-    return $title;
   }
 
 }

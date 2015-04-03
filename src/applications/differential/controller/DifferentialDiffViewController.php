@@ -29,8 +29,6 @@ final class DifferentialDiffViewController extends DifferentialController {
         ->setURI('/D'.$diff->getRevisionID().'?id='.$diff->getID());
     }
 
-    $error_view = id(new PHUIInfoView())
-        ->setSeverity(PHUIInfoView::SEVERITY_NOTICE);
     // TODO: implement optgroup support in AphrontFormSelectControl?
     $select = array();
     $select[] = hsprintf('<optgroup label="%s">', pht('Create New Revision'));
@@ -40,21 +38,26 @@ final class DifferentialDiffViewController extends DifferentialController {
       pht('Create a new Revision...'));
     $select[] = hsprintf('</optgroup>');
 
-    $revisions = id(new DifferentialRevisionQuery())
-      ->setViewer($viewer)
-      ->withAuthors(array($viewer->getPHID()))
-      ->withStatus(DifferentialRevisionQuery::STATUS_OPEN)
-      ->execute();
+    $selected_id = $request->getInt('revisionID');
+
+    $revisions = $this->loadSelectableRevisions($viewer, $selected_id);
 
     if ($revisions) {
       $select[] = hsprintf(
         '<optgroup label="%s">',
         pht('Update Existing Revision'));
       foreach ($revisions as $revision) {
+        if ($selected_id == $revision->getID()) {
+          $selected = 'selected';
+        } else {
+          $selected = null;
+        }
+
         $select[] = phutil_tag(
           'option',
           array(
             'value' => $revision->getID(),
+            'selected' => $selected,
           ),
           id(new PhutilUTF8StringTruncator())
           ->setMaximumGlyphs(128)
@@ -88,8 +91,6 @@ final class DifferentialDiffViewController extends DifferentialController {
       ->appendChild(
         id(new AphrontFormSubmitControl())
         ->setValue(pht('Continue')));
-
-    $error_view->appendChild($form);
 
     $props = id(new DifferentialDiffProperty())->loadAllWhere(
     'diffID = %d',
@@ -129,7 +130,7 @@ final class DifferentialDiffViewController extends DifferentialController {
     $prop_box = id(new PHUIObjectBoxView())
       ->setHeader($property_head)
       ->addPropertyList($property_view)
-      ->setInfoView($error_view);
+      ->appendChild($form);
 
     return $this->buildApplicationPage(
       array(
@@ -142,5 +143,46 @@ final class DifferentialDiffViewController extends DifferentialController {
         'title' => pht('Diff View'),
       ));
   }
+
+  private function loadSelectableRevisions(
+    PhabricatorUser $viewer,
+    $selected_id) {
+
+    $revisions = id(new DifferentialRevisionQuery())
+      ->setViewer($viewer)
+      ->withAuthors(array($viewer->getPHID()))
+      ->withStatus(DifferentialRevisionQuery::STATUS_OPEN)
+      ->requireCapabilities(
+        array(
+          PhabricatorPolicyCapability::CAN_VIEW,
+          PhabricatorPolicyCapability::CAN_EDIT,
+        ))
+      ->execute();
+    $revisions = mpull($revisions, null, 'getID');
+
+    // If a specific revision is selected (for example, because the user is
+    // following the "Update Diff" workflow), but not present in the dropdown,
+    // try to add it to the dropdown even if it is closed. This allows the
+    // workflow to be used to update abandoned revisions.
+
+    if ($selected_id) {
+      if (empty($revisions[$selected_id])) {
+        $selected = id(new DifferentialRevisionQuery())
+          ->setViewer($viewer)
+          ->withAuthors(array($viewer->getPHID()))
+          ->withIDs(array($selected_id))
+          ->requireCapabilities(
+            array(
+              PhabricatorPolicyCapability::CAN_VIEW,
+              PhabricatorPolicyCapability::CAN_EDIT,
+            ))
+          ->execute();
+        $revisions = mpull($selected, null, 'getID') + $revisions;
+      }
+    }
+
+    return $revisions;
+  }
+
 
 }

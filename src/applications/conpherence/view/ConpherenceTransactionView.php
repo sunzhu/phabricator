@@ -89,18 +89,19 @@ final class ConpherenceTransactionView extends AphrontView {
     $content_class = null;
     $content = null;
     switch ($transaction->getTransactionType()) {
-      case ConpherenceTransactionType::TYPE_TITLE:
-        $content = $transaction->getTitle();
-        $transaction_view->addClass('conpherence-edited');
-        break;
       case ConpherenceTransactionType::TYPE_FILES:
         $content = $transaction->getTitle();
         break;
+      case ConpherenceTransactionType::TYPE_TITLE:
       case ConpherenceTransactionType::TYPE_PARTICIPANTS:
+      case PhabricatorTransactions::TYPE_VIEW_POLICY:
+      case PhabricatorTransactions::TYPE_EDIT_POLICY:
+      case PhabricatorTransactions::TYPE_JOIN_POLICY:
         $content = $transaction->getTitle();
         $transaction_view->addClass('conpherence-edited');
         break;
       case PhabricatorTransactions::TYPE_COMMENT:
+        $transaction_view->addClass('conpherence-comment');
         $comment = $transaction->getComment();
         $content = $this->markupEngine->getOutput(
           $comment,
@@ -142,7 +143,8 @@ final class ConpherenceTransactionView extends AphrontView {
     $handles = $conpherence->getHandles();
     $rendered_transactions = array();
     $engine = id(new PhabricatorMarkupEngine())
-      ->setViewer($user);
+      ->setViewer($user)
+      ->setContextObject($conpherence);
     foreach ($transactions as $key => $transaction) {
       if ($transaction->shouldHide()) {
         unset($transactions[$key]);

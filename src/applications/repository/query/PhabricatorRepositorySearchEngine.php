@@ -84,15 +84,6 @@ final class PhabricatorRepositorySearchEngine
     $name = $saved_query->getParameter('name');
     $any_project_phids = $saved_query->getParameter('anyProjectPHIDs', array());
 
-    if ($any_project_phids) {
-      $any_project_handles = id(new PhabricatorHandleQuery())
-        ->setViewer($this->requireViewer())
-        ->withPHIDs($any_project_phids)
-        ->execute();
-    } else {
-      $any_project_handles = array();
-    }
-
     $form
       ->appendChild(
         id(new AphrontFormTextControl())
@@ -104,12 +95,12 @@ final class PhabricatorRepositorySearchEngine
           ->setName('name')
           ->setLabel(pht('Name Contains'))
           ->setValue($name))
-      ->appendChild(
+      ->appendControl(
         id(new AphrontFormTokenizerControl())
           ->setDatasource(new PhabricatorProjectDatasource())
           ->setName('anyProjects')
           ->setLabel(pht('In Any Project'))
-          ->setValue($any_project_handles))
+          ->setValue($any_project_phids))
       ->appendChild(
         id(new AphrontFormSelectControl())
           ->setName('status')
@@ -195,6 +186,7 @@ final class PhabricatorRepositorySearchEngine
       'name' => pht('Name'),
       'callsign' => pht('Callsign'),
       'created' => pht('Date Created'),
+      'size' => pht('Commit Count'),
     );
   }
 
@@ -204,6 +196,7 @@ final class PhabricatorRepositorySearchEngine
       'name' => PhabricatorRepositoryQuery::ORDER_NAME,
       'callsign' => PhabricatorRepositoryQuery::ORDER_CALLSIGN,
       'created' => PhabricatorRepositoryQuery::ORDER_CREATED,
+      'size' => PhabricatorRepositoryQuery::ORDER_SIZE,
     );
   }
 
