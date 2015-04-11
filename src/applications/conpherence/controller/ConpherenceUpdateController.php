@@ -10,6 +10,7 @@ final class ConpherenceUpdateController
       return new Aphront404Response();
     }
 
+    $need_participants = false;
     $needed_capabilities = array(PhabricatorPolicyCapability::CAN_VIEW);
     $action = $request->getStr('action', ConpherenceUpdateActions::METADATA);
     switch ($action) {
@@ -26,12 +27,17 @@ final class ConpherenceUpdateController
       case ConpherenceUpdateActions::JOIN_ROOM:
         $needed_capabilities[] = PhabricatorPolicyCapability::CAN_JOIN;
         break;
+      case ConpherenceUpdateActions::NOTIFICATIONS:
+        $need_participants = true;
+        break;
+      case ConpherenceUpdateActions::LOAD:
+        break;
     }
     $conpherence = id(new ConpherenceThreadQuery())
       ->setViewer($user)
       ->withIDs(array($conpherence_id))
       ->needFilePHIDs(true)
-      ->needParticipantCache(true)
+      ->needParticipants($need_participants)
       ->requireCapabilities($needed_capabilities)
       ->executeOne();
 
@@ -76,11 +82,17 @@ final class ConpherenceUpdateController
           break;
         case ConpherenceUpdateActions::MESSAGE:
           $message = $request->getStr('text');
-          $xactions = $editor->generateTransactionsFromText(
-            $user,
-            $conpherence,
-            $message);
-          $delete_draft = true;
+          if (strlen($message)) {
+            $xactions = $editor->generateTransactionsFromText(
+              $user,
+              $conpherence,
+              $message);
+            $delete_draft = true;
+          } else {
+            $action = ConpherenceUpdateActions::LOAD;
+            $updated = false;
+            $response_mode = 'ajax';
+          }
           break;
         case ConpherenceUpdateActions::ADD_PERSON:
           $person_phids = $request->getArr('add_person');
@@ -120,25 +132,28 @@ final class ConpherenceUpdateController
             ->setContent($result);
           break;
         case ConpherenceUpdateActions::METADATA:
-          $updated = false;
           // all metadata updates are continue requests
           if (!$request->isContinueRequest()) {
             break;
           }
 
           $title = $request->getStr('title');
-          if ($title != $conpherence->getTitle()) {
+          $xactions[] = id(new ConpherenceTransaction())
+            ->setTransactionType(ConpherenceTransactionType::TYPE_TITLE)
+            ->setNewValue($title);
+          if ($conpherence->getIsRoom()) {
             $xactions[] = id(new ConpherenceTransaction())
-              ->setTransactionType(ConpherenceTransactionType::TYPE_TITLE)
-              ->setNewValue($title);
-            $updated = true;
-            if (!$request->getExists('force_ajax')) {
-              $response_mode = 'redirect';
-            }
+              ->setTransactionType(PhabricatorTransactions::TYPE_VIEW_POLICY)
+              ->setNewValue($request->getStr('viewPolicy'));
+            $xactions[] = id(new ConpherenceTransaction())
+              ->setTransactionType(PhabricatorTransactions::TYPE_EDIT_POLICY)
+              ->setNewValue($request->getStr('editPolicy'));
+            $xactions[] = id(new ConpherenceTransaction())
+              ->setTransactionType(PhabricatorTransactions::TYPE_JOIN_POLICY)
+              ->setNewValue($request->getStr('joinPolicy'));
           }
-          if (!$updated) {
-            $errors[] = pht(
-              'That was a non-update. Try cancel.');
+          if (!$request->getExists('force_ajax')) {
+            $response_mode = 'redirect';
           }
           break;
         case ConpherenceUpdateActions::LOAD:
@@ -163,6 +178,11 @@ final class ConpherenceUpdateController
           return id(new PhabricatorApplicationTransactionNoEffectResponse())
             ->setCancelURI($this->getApplicationURI($conpherence_id.'/'))
             ->setException($ex);
+        }
+        // xactions had no effect...!
+        if (empty($xactions)) {
+          $errors[] = pht(
+            'That was a non-update. Try cancel.');
         }
       }
 
@@ -293,6 +313,8 @@ final class ConpherenceUpdateController
     $error_view) {
 
     $request = $this->getRequest();
+    $user = $request->getUser();
+
     $form = id(new PHUIFormLayoutView())
       ->appendChild($error_view)
       ->appendChild(
@@ -301,9 +323,38 @@ final class ConpherenceUpdateController
         ->setName('title')
         ->setValue($conpherence->getTitle()));
 
+    if ($conpherence->getIsRoom()) {
+      $title = pht('Update Room');
+      $policies = id(new PhabricatorPolicyQuery())
+        ->setViewer($user)
+        ->setObject($conpherence)
+        ->execute();
+
+      $form->appendChild(
+        id(new AphrontFormPolicyControl())
+        ->setName('viewPolicy')
+        ->setPolicyObject($conpherence)
+        ->setCapability(PhabricatorPolicyCapability::CAN_VIEW)
+        ->setPolicies($policies))
+      ->appendChild(
+        id(new AphrontFormPolicyControl())
+        ->setName('editPolicy')
+        ->setPolicyObject($conpherence)
+        ->setCapability(PhabricatorPolicyCapability::CAN_EDIT)
+        ->setPolicies($policies))
+      ->appendChild(
+        id(new AphrontFormPolicyControl())
+        ->setName('joinPolicy')
+        ->setPolicyObject($conpherence)
+        ->setCapability(PhabricatorPolicyCapability::CAN_JOIN)
+        ->setPolicies($policies));
+    } else {
+      $title = pht('Update Thread');
+    }
+
     require_celerity_resource('conpherence-update-css');
     $view = id(new AphrontDialogView())
-      ->setTitle(pht('Update Conpherence'))
+      ->setTitle($title)
       ->addHiddenInput('action', 'metadata')
       ->addHiddenInput(
         'latest_transaction_id',
@@ -328,10 +379,9 @@ final class ConpherenceUpdateController
 
     $need_widget_data = false;
     $need_transactions = false;
-    $need_participant_cache = false;
+    $need_participant_cache = true;
     switch ($action) {
       case ConpherenceUpdateActions::METADATA:
-        $need_participant_cache = true;
         $need_transactions = true;
         break;
       case ConpherenceUpdateActions::LOAD:
@@ -358,13 +408,17 @@ final class ConpherenceUpdateController
       ->withIDs(array($conpherence_id))
       ->executeOne();
 
-    if ($need_transactions) {
+    $non_update = false;
+    if ($need_transactions && $conpherence->getTransactions()) {
       $data = ConpherenceTransactionView::renderTransactions(
         $user,
         $conpherence,
         !$this->getRequest()->getExists('minimal_display'));
       $participant_obj = $conpherence->getParticipant($user->getPHID());
       $participant_obj->markUpToDate($conpherence, $data['latest_transaction']);
+    } else if ($need_transactions) {
+      $non_update = true;
+      $data = array();
     } else {
       $data = array();
     }
@@ -412,6 +466,7 @@ final class ConpherenceUpdateController
     }
     $data = $conpherence->getDisplayData($user);
     $content = array(
+      'non_update' => $non_update,
       'transactions' => hsprintf('%s', $rendered_transactions),
       'conpherence_title' => (string) $data['title'],
       'latest_transaction_id' => $new_latest_transaction_id,

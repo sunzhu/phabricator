@@ -375,13 +375,13 @@ final class ConpherenceDurableColumnView extends AphrontTagView {
             ),
             $header),
           $settings_button,
-          $settings_menu,));
-
+          $settings_menu,
+        ));
   }
 
   private function getHeaderActionsConfig(ConpherenceThread $conpherence) {
     if ($conpherence->getIsRoom()) {
-      $rename_label = pht('Rename Room');
+      $rename_label = pht('Edit Room');
     } else {
       $rename_label = pht('Rename Thread');
     }
@@ -418,7 +418,8 @@ final class ConpherenceDurableColumnView extends AphrontTagView {
         'href' => '#',
         'icon' => 'fa-times',
         'key' => 'hide_column',
-      ),);
+      ),
+    );
   }
 
   private function buildTransactions() {
@@ -441,7 +442,8 @@ final class ConpherenceDurableColumnView extends AphrontTagView {
             'class' => 'button grey',
             'sigil' => 'workflow',
           ),
-          pht('Send a Message')),);
+          pht('Send a Message')),
+      );
     }
 
     $data = ConpherenceTransactionView::renderTransactions(
@@ -501,7 +503,8 @@ final class ConpherenceDurableColumnView extends AphrontTagView {
           'type' => 'hidden',
           'name' => 'action',
           'value' => ConpherenceUpdateActions::MESSAGE,
-        )),));
+        )),
+      ));
   }
 
   private function buildStatusText() {

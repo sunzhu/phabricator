@@ -3,8 +3,6 @@
 final class ManiphestTransactionEditor
   extends PhabricatorApplicationTransactionEditor {
 
-  private $heraldEmailPHIDs = array();
-
   public function getEditorApplicationClass() {
     return 'PhabricatorManiphestApplication';
   }
@@ -388,22 +386,12 @@ final class ManiphestTransactionEditor
   }
 
   protected function getMailTo(PhabricatorLiskDAO $object) {
-    return array(
-      $object->getOwnerPHID(),
-      $this->getActingAsPHID(),
-    );
-  }
-
-  protected function getMailCC(PhabricatorLiskDAO $object) {
     $phids = array();
 
-    foreach (parent::getMailCC($object) as $phid) {
-      $phids[] = $phid;
+    if ($object->getOwnerPHID()) {
+      $phids[] = $object->getOwnerPHID();
     }
-
-    foreach ($this->heraldEmailPHIDs as $phid) {
-      $phids[] = $phid;
-    }
+    $phids[] = $this->getActingAsPHID();
 
     return $phids;
   }
@@ -521,7 +509,6 @@ final class ManiphestTransactionEditor
     HeraldAdapter $adapter,
     HeraldTranscript $transcript) {
 
-    $this->heraldEmailPHIDs = $adapter->getEmailPHIDs();
     $xactions = array();
 
     $cc_phids = $adapter->getCcPHIDs();
