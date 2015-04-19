@@ -382,8 +382,6 @@ final class ConpherenceUpdateController
     $need_participant_cache = true;
     switch ($action) {
       case ConpherenceUpdateActions::METADATA:
-        $need_transactions = true;
-        break;
       case ConpherenceUpdateActions::LOAD:
         $need_transactions = true;
         break;
@@ -410,7 +408,7 @@ final class ConpherenceUpdateController
 
     $non_update = false;
     if ($need_transactions && $conpherence->getTransactions()) {
-      $data = ConpherenceTransactionView::renderTransactions(
+      $data = ConpherenceTransactionRenderer::renderTransactions(
         $user,
         $conpherence,
         !$this->getRequest()->getExists('minimal_display'));
