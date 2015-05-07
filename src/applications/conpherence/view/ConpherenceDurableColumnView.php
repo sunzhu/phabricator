@@ -9,6 +9,7 @@ final class ConpherenceDurableColumnView extends AphrontTagView {
   private $visible;
   private $initialLoad = false;
   private $policyObjects;
+  private $quicksandConfig = array();
 
   public function setConpherences(array $conpherences) {
     assert_instances_of($conpherences, 'ConpherenceThread');
@@ -78,6 +79,15 @@ final class ConpherenceDurableColumnView extends AphrontTagView {
     return $this->policyObjects;
   }
 
+  public function setQuicksandConfig(array $config) {
+    $this->quicksandConfig = $config;
+    return $this;
+  }
+
+  public function getQuicksandConfig() {
+    return $this->quicksandConfig;
+  }
+
   protected function getTagAttributes() {
     if ($this->getVisible()) {
       $style = null;
@@ -106,6 +116,7 @@ final class ConpherenceDurableColumnView extends AphrontTagView {
       array(
         'visible' => $this->getVisible(),
         'settingsURI' => '/settings/adjust/?key='.$column_key,
+        'quicksandConfig' => $this->getQuicksandConfig(),
       ));
 
     $policies = array();
@@ -240,7 +251,7 @@ final class ConpherenceDurableColumnView extends AphrontTagView {
         array(),
         array(
           $icon,
-          $data['js_title'],
+          $data['title'],
         ));
       $image = $data['image'];
       Javelin::initBehavior('phabricator-tooltips');
@@ -254,7 +265,7 @@ final class ConpherenceDurableColumnView extends AphrontTagView {
             'meta' => array(
               'threadID' => $conpherence->getID(),
               'threadTitle' => hsprintf('%s', $thread_title),
-              'tip' => $data['js_title'],
+              'tip' => $data['title'],
               'align' => 'S',
             ),
           ),
@@ -401,7 +412,7 @@ final class ConpherenceDurableColumnView extends AphrontTagView {
       array(
         'name' => $rename_label,
         'disabled' => !$can_edit,
-        'href' => '/conpherence/update/'.$conpherence->getID().'/',
+        'href' => '/conpherence/update/'.$conpherence->getID().'/?nopic',
         'icon' => 'fa-pencil',
         'key' => ConpherenceUpdateActions::METADATA,
       ),
@@ -452,7 +463,8 @@ final class ConpherenceDurableColumnView extends AphrontTagView {
       $full_display = false);
     $messages = ConpherenceTransactionRenderer::renderMessagePaneContent(
       $data['transactions'],
-      $data['oldest_transaction_id']);
+      $data['oldest_transaction_id'],
+      $data['newest_transaction_id']);
 
     return $messages;
   }
