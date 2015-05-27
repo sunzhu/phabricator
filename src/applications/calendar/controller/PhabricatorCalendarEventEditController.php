@@ -13,28 +13,64 @@ final class PhabricatorCalendarEventEditController
     return !$this->id;
   }
 
-  public function processRequest() {
-    $request = $this->getRequest();
-    $user = $request->getUser();
-    $user_phid = $user->getPHID();
+  public function handleRequest(AphrontRequest $request) {
+    $viewer = $request->getViewer();
+    $user_phid = $viewer->getPHID();
     $error_name = true;
     $error_start_date = true;
     $error_end_date = true;
     $validation_exception = null;
 
+    $all_day_id = celerity_generate_unique_node_id();
+    $start_date_id = celerity_generate_unique_node_id();
+    $end_date_id = null;
+
+    $next_workflow = $request->getStr('next');
+    $uri_query = $request->getStr('query');
+
     if ($this->isCreate()) {
-      $event = PhabricatorCalendarEvent::initializeNewCalendarEvent($user);
-      $end_value = AphrontFormDateControlValue::newFromEpoch($user, time());
-      $start_value = AphrontFormDateControlValue::newFromEpoch($user, time());
+      $event = PhabricatorCalendarEvent::initializeNewCalendarEvent($viewer);
+
+      $create_start_year = $request->getInt('year');
+      $create_start_month = $request->getInt('month');
+      $create_start_day = $request->getInt('day');
+      $create_start_time = $request->getStr('time');
+
+      if ($create_start_year) {
+        $start = AphrontFormDateControlValue::newFromParts(
+          $viewer,
+          $create_start_year,
+          $create_start_month,
+          $create_start_day,
+          $create_start_time);
+        if (!$start->isValid()) {
+          return new Aphront400Response();
+        }
+        $start_value = AphrontFormDateControlValue::newFromEpoch(
+          $viewer,
+          $start->getEpoch());
+
+        $end = clone $start_value->getDateTime();
+        $end->modify('+1 hour');
+        $end_value = AphrontFormDateControlValue::newFromEpoch(
+          $viewer,
+          $end->format('U'));
+
+      } else {
+        list($start_value, $end_value) = $this->getDefaultTimeValues($viewer);
+      }
+
+
       $submit_label = pht('Create');
       $page_title = pht('Create Event');
       $redirect = 'created';
       $subscribers = array();
       $invitees = array($user_phid);
       $cancel_uri = $this->getApplicationURI();
+      $end_date_id = celerity_generate_unique_node_id();
     } else {
       $event = id(new PhabricatorCalendarEventQuery())
-        ->setViewer($user)
+        ->setViewer($viewer)
         ->withIDs(array($this->id))
         ->requireCapabilities(
           array(
@@ -47,10 +83,10 @@ final class PhabricatorCalendarEventEditController
       }
 
       $end_value = AphrontFormDateControlValue::newFromEpoch(
-        $user,
+        $viewer,
         $event->getDateTo());
       $start_value = AphrontFormDateControlValue::newFromEpoch(
-        $user,
+        $viewer,
         $event->getDateFrom());
 
       $submit_label = pht('Update');
@@ -74,9 +110,10 @@ final class PhabricatorCalendarEventEditController
     $name = $event->getName();
     $description = $event->getDescription();
     $is_all_day = $event->getIsAllDay();
+    $icon = $event->getIcon();
 
     $current_policies = id(new PhabricatorPolicyQuery())
-      ->setViewer($user)
+      ->setViewer($viewer)
       ->setObject($event)
       ->execute();
 
@@ -95,14 +132,15 @@ final class PhabricatorCalendarEventEditController
       $edit_policy = $request->getStr('editPolicy');
       $view_policy = $request->getStr('viewPolicy');
       $is_all_day = $request->getStr('isAllDay');
+      $icon = $request->getStr('icon');
 
       $invitees = $request->getArr('invitees');
       $new_invitees = $this->getNewInviteeList($invitees, $event);
       $status_attending = PhabricatorCalendarEventInvitee::STATUS_ATTENDING;
       if ($this->isCreate()) {
-        $status = idx($new_invitees, $user->getPHID());
+        $status = idx($new_invitees, $viewer->getPHID());
         if ($status) {
-          $new_invitees[$user->getPHID()] = $status_attending;
+          $new_invitees[$viewer->getPHID()] = $status_attending;
         }
       }
 
@@ -115,6 +153,11 @@ final class PhabricatorCalendarEventEditController
         ->setTransactionType(
           PhabricatorCalendarEventTransaction::TYPE_ALL_DAY)
         ->setNewValue($is_all_day);
+
+      $xactions[] = id(new PhabricatorCalendarEventTransaction())
+        ->setTransactionType(
+          PhabricatorCalendarEventTransaction::TYPE_ICON)
+        ->setNewValue($icon);
 
       $xactions[] = id(new PhabricatorCalendarEventTransaction())
         ->setTransactionType(
@@ -150,14 +193,29 @@ final class PhabricatorCalendarEventEditController
         ->setNewValue($request->getStr('editPolicy'));
 
       $editor = id(new PhabricatorCalendarEventEditor())
-        ->setActor($user)
+        ->setActor($viewer)
         ->setContentSourceFromRequest($request)
         ->setContinueOnNoEffect(true);
 
       try {
         $xactions = $editor->applyTransactions($event, $xactions);
         $response = id(new AphrontRedirectResponse());
-        return $response->setURI('/E'.$event->getID());
+        switch ($next_workflow) {
+          case 'day':
+            if (!$uri_query) {
+              $uri_query = 'month';
+            }
+            $year = $start_value->getDateTime()->format('Y');
+            $month = $start_value->getDateTime()->format('m');
+            $day = $start_value->getDateTime()->format('d');
+            $response->setURI(
+              '/calendar/query/'.$uri_query.'/'.$year.'/'.$month.'/'.$day.'/');
+            break;
+          default:
+            $response->setURI('/E'.$event->getID());
+            break;
+        }
+        return $response;
       } catch (PhabricatorApplicationTransactionValidationException $ex) {
         $validation_exception = $ex;
         $error_name = $ex->getShortMessage(
@@ -171,10 +229,6 @@ final class PhabricatorCalendarEventEditController
         $event->setEditPolicy($edit_policy);
       }
     }
-
-    $all_day_id = celerity_generate_unique_node_id();
-    $start_date_id = celerity_generate_unique_node_id();
-    $end_date_id = celerity_generate_unique_node_id();
 
     Javelin::initBehavior('event-all-day', array(
       'allDayID' => $all_day_id,
@@ -197,16 +251,17 @@ final class PhabricatorCalendarEventEditController
         $all_day_id);
 
     $start_control = id(new AphrontFormDateControl())
-      ->setUser($user)
+      ->setUser($viewer)
       ->setName('start')
       ->setLabel(pht('Start'))
       ->setError($error_start_date)
       ->setValue($start_value)
       ->setID($start_date_id)
-      ->setIsTimeDisabled($is_all_day);
+      ->setIsTimeDisabled($is_all_day)
+      ->setEndDateID($end_date_id);
 
     $end_control = id(new AphrontFormDateControl())
-      ->setUser($user)
+      ->setUser($viewer)
       ->setName('end')
       ->setLabel(pht('End'))
       ->setError($error_end_date)
@@ -220,13 +275,13 @@ final class PhabricatorCalendarEventEditController
       ->setValue($description);
 
     $view_policies = id(new AphrontFormPolicyControl())
-      ->setUser($user)
+      ->setUser($viewer)
       ->setCapability(PhabricatorPolicyCapability::CAN_VIEW)
       ->setPolicyObject($event)
       ->setPolicies($current_policies)
       ->setName('viewPolicy');
     $edit_policies = id(new AphrontFormPolicyControl())
-      ->setUser($user)
+      ->setUser($viewer)
       ->setCapability(PhabricatorPolicyCapability::CAN_EDIT)
       ->setPolicyObject($event)
       ->setPolicies($current_policies)
@@ -236,18 +291,34 @@ final class PhabricatorCalendarEventEditController
       ->setLabel(pht('Subscribers'))
       ->setName('subscribers')
       ->setValue($subscribers)
-      ->setUser($user)
+      ->setUser($viewer)
       ->setDatasource(new PhabricatorMetaMTAMailableDatasource());
 
     $invitees = id(new AphrontFormTokenizerControl())
       ->setLabel(pht('Invitees'))
       ->setName('invitees')
       ->setValue($invitees)
-      ->setUser($user)
+      ->setUser($viewer)
       ->setDatasource(new PhabricatorMetaMTAMailableDatasource());
 
+    if ($this->isCreate()) {
+      $icon_uri = $this->getApplicationURI('icon/');
+    } else {
+      $icon_uri = $this->getApplicationURI('icon/'.$event->getID().'/');
+    }
+    $icon_display = PhabricatorCalendarIcon::renderIconForChooser($icon);
+    $icon = id(new AphrontFormChooseButtonControl())
+      ->setLabel(pht('Icon'))
+      ->setName('icon')
+      ->setDisplayValue($icon_display)
+      ->setButtonText(pht('Choose Icon...'))
+      ->setChooseURI($icon_uri)
+      ->setValue($icon);
+
     $form = id(new AphrontFormView())
-      ->setUser($user)
+      ->addHiddenInput('next', $next_workflow)
+      ->addHiddenInput('query', $uri_query)
+      ->setUser($viewer)
       ->appendChild($name)
       ->appendChild($all_day_checkbox)
       ->appendChild($start_control)
@@ -256,7 +327,8 @@ final class PhabricatorCalendarEventEditController
       ->appendControl($edit_policies)
       ->appendControl($subscribers)
       ->appendControl($invitees)
-      ->appendChild($description);
+      ->appendChild($description)
+      ->appendChild($icon);
 
 
     if ($request->isAjax()) {
@@ -326,6 +398,24 @@ final class PhabricatorCalendarEventEditController
     }
 
     return $new;
+  }
+
+  private function getDefaultTimeValues($viewer) {
+    $start = new DateTime('@'.time());
+    $start->setTimeZone($viewer->getTimeZone());
+
+    $start->setTime($start->format('H'), 0, 0);
+    $start->modify('+1 hour');
+    $end = id(clone $start)->modify('+1 hour');
+
+    $start_value = AphrontFormDateControlValue::newFromEpoch(
+      $viewer,
+      $start->format('U'));
+    $end_value = AphrontFormDateControlValue::newFromEpoch(
+      $viewer,
+      $end->format('U'));
+
+    return array($start_value, $end_value);
   }
 
 }

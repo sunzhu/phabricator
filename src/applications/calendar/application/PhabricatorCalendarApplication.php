@@ -45,11 +45,17 @@ final class PhabricatorCalendarApplication extends PhabricatorApplication {
         '(?:query/(?P<queryKey>[^/]+)/(?:(?P<year>\d+)/'.
           '(?P<month>\d+)/)?(?:(?P<day>\d+)/)?)?'
           => 'PhabricatorCalendarEventListController',
+        'icon/(?P<id>[1-9]\d*)/'
+          => 'PhabricatorCalendarEventEditIconController',
+        'icon/'
+          => 'PhabricatorCalendarEventEditIconController',
         'event/' => array(
           'create/'
             => 'PhabricatorCalendarEventEditController',
           'edit/(?P<id>[1-9]\d*)/'
             => 'PhabricatorCalendarEventEditController',
+          'drag/(?P<id>[1-9]\d*)/'
+            => 'PhabricatorCalendarEventDragController',
           'cancel/(?P<id>[1-9]\d*)/'
             => 'PhabricatorCalendarEventCancelController',
           '(?P<action>join|decline|accept)/(?P<id>[1-9]\d*)/'

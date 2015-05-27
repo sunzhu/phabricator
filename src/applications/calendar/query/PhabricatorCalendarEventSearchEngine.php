@@ -76,9 +76,11 @@ final class PhabricatorCalendarEventSearchEngine
       $display_start = $start_day->format('U');
       $display_end = $next->format('U');
 
-      // 0 = Sunday is always the start of the week, for now
-      $start_of_week = 0;
-      $end_of_week = 6 - $start_of_week;
+      $preferences = $viewer->loadPreferences();
+      $pref_week_day = PhabricatorUserPreferences::PREFERENCE_WEEK_START_DAY;
+
+      $start_of_week = $preferences->getPreference($pref_week_day, 0);
+      $end_of_week = ($start_of_week + 6) % 7;
 
       $first_of_month = $start_day->format('w');
       $last_of_month = id(clone $next)->modify('-1 day')->format('w');
@@ -87,9 +89,10 @@ final class PhabricatorCalendarEventSearchEngine
         $min_range = $display_start;
 
         if ($this->isMonthView($saved) &&
-          $first_of_month > $start_of_week) {
+          $first_of_month !== $start_of_week) {
+          $interim_day_num = ($first_of_month + 7 - $start_of_week) % 7;
           $min_range = id(clone $start_day)
-            ->modify('-'.$first_of_month.' days')
+            ->modify('-'.$interim_day_num.' days')
             ->format('U');
         }
       }
@@ -97,9 +100,10 @@ final class PhabricatorCalendarEventSearchEngine
         $max_range = $display_end;
 
         if ($this->isMonthView($saved) &&
-          $last_of_month < $end_of_week) {
+          $last_of_month !== $end_of_week) {
+          $interim_day_num = ($end_of_week + 7 - $last_of_month) % 7;
           $max_range = id(clone $next)
-            ->modify('+'.(6 - $first_of_month).' days')
+            ->modify('+'.$interim_day_num.' days')
             ->format('U');
         }
 
@@ -303,17 +307,12 @@ final class PhabricatorCalendarEventSearchEngine
     foreach ($events as $event) {
       $href = '/E'.$event->getID();
       $from = phabricator_datetime($event->getDateFrom(), $viewer);
-      $to   = phabricator_datetime($event->getDateTo(), $viewer);
+      $to = phabricator_datetime($event->getDateTo(), $viewer);
       $creator_handle = $handles[$event->getUserPHID()];
-
-      $color = ($event->getStatus() == PhabricatorCalendarEvent::STATUS_AWAY)
-        ? 'red'
-        : 'yellow';
 
       $item = id(new PHUIObjectItemView())
         ->setHeader($event->getName())
         ->setHref($href)
-        ->setBarColor($color)
         ->addByline(pht('Creator: %s', $creator_handle->renderLink()))
         ->addAttribute(pht('From %s to %s', $from, $to))
         ->addAttribute(id(new PhutilUTF8StringTruncator())
@@ -365,6 +364,7 @@ final class PhabricatorCalendarEventSearchEngine
       $event = new AphrontCalendarEventView();
       $event->setEpochRange($status->getDateFrom(), $status->getDateTo());
       $event->setIsAllDay($status->getIsAllDay());
+      $event->setIcon($status->getIcon());
 
       $name_text = $handles[$status->getUserPHID()]->getName();
       $status_text = $status->getName();
@@ -390,12 +390,13 @@ final class PhabricatorCalendarEventSearchEngine
     list($start_year, $start_month, $start_day) =
       $this->getDisplayYearAndMonthAndDay($query);
 
-    $day_view = new PHUICalendarDayView(
+    $day_view = id(new PHUICalendarDayView(
       $this->getDateFrom($query),
       $this->getDateTo($query),
       $start_year,
       $start_month,
-      $start_day);
+      $start_day))
+      ->setQuery($query->getQueryKey());
 
     $day_view->setUser($viewer);
 
@@ -408,10 +409,17 @@ final class PhabricatorCalendarEventSearchEngine
 
       $viewer_is_invited = $status->getIsUserInvited($viewer->getPHID());
 
+      $can_edit = PhabricatorPolicyFilter::hasCapability(
+        $viewer,
+        $status,
+        PhabricatorPolicyCapability::CAN_EDIT);
+
       $event = new AphrontCalendarEventView();
+      $event->setCanEdit($can_edit);
       $event->setEventID($status->getID());
       $event->setEpochRange($status->getDateFrom(), $status->getDateTo());
       $event->setIsAllDay($status->getIsAllDay());
+      $event->setIcon($status->getIcon());
       $event->setViewerIsInvited($viewer_is_invited);
 
       $event->setName($status->getName());
