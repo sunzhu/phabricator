@@ -50,12 +50,16 @@ final class PhabricatorCalendarEventSearchEngine
   }
 
   public function buildQueryFromSavedQuery(PhabricatorSavedQuery $saved) {
-    $query = id(new PhabricatorCalendarEventQuery());
+    $query = id(new PhabricatorCalendarEventQuery())
+      ->setGenerateGhosts(true);
     $viewer = $this->requireViewer();
     $timezone = new DateTimeZone($viewer->getTimezoneIdentifier());
 
     $min_range = $this->getDateFrom($saved)->getEpoch();
     $max_range = $this->getDateTo($saved)->getEpoch();
+
+    $user_datasource = id(new PhabricatorPeopleUserFunctionDatasource())
+      ->setViewer($viewer);
 
     if ($this->isMonthView($saved) ||
       $this->isDayView($saved)) {
@@ -122,17 +126,20 @@ final class PhabricatorCalendarEventSearchEngine
       $query->withDateRange($min_range, $max_range);
     }
 
-    $invited_phids = $saved->getParameter('invitedPHIDs');
+    $invited_phids = $saved->getParameter('invitedPHIDs', array());
+    $invited_phids = $user_datasource->evaluateTokens($invited_phids);
     if ($invited_phids) {
       $query->withInvitedPHIDs($invited_phids);
     }
 
-    $creator_phids = $saved->getParameter('creatorPHIDs');
+    $creator_phids = $saved->getParameter('creatorPHIDs', array());
+    $creator_phids = $user_datasource->evaluateTokens($creator_phids);
     if ($creator_phids) {
       $query->withCreatorPHIDs($creator_phids);
     }
 
-    $is_cancelled = $saved->getParameter('isCancelled');
+    $is_cancelled = $saved->getParameter('isCancelled', 'active');
+
     switch ($is_cancelled) {
       case 'active':
         $query->withIsCancelled(false);
@@ -194,13 +201,13 @@ final class PhabricatorCalendarEventSearchEngine
     $form
       ->appendControl(
         id(new AphrontFormTokenizerControl())
-          ->setDatasource(new PhabricatorPeopleDatasource())
+          ->setDatasource(new PhabricatorPeopleUserFunctionDatasource())
           ->setName('creators')
           ->setLabel(pht('Created By'))
           ->setValue($creator_phids))
       ->appendControl(
         id(new AphrontFormTokenizerControl())
-          ->setDatasource(new PhabricatorPeopleDatasource())
+          ->setDatasource(new PhabricatorPeopleUserFunctionDatasource())
           ->setName('invited')
           ->setLabel(pht('Invited'))
           ->setValue($invited_phids))
@@ -305,19 +312,32 @@ final class PhabricatorCalendarEventSearchEngine
     $viewer = $this->requireViewer();
     $list = new PHUIObjectItemListView();
     foreach ($events as $event) {
-      $href = '/E'.$event->getID();
       $from = phabricator_datetime($event->getDateFrom(), $viewer);
-      $to = phabricator_datetime($event->getDateTo(), $viewer);
+      $duration = '';
       $creator_handle = $handles[$event->getUserPHID()];
 
+      $attendees = array();
+      foreach ($event->getInvitees() as $invitee) {
+        $attendees[] = $invitee->getInviteePHID();
+      }
+
+      $attendees = pht(
+        'Attending: %s',
+        $viewer->renderHandleList($attendees)
+          ->setAsInline(1)
+          ->render());
+
+      if (strlen($event->getDuration()) > 0) {
+        $duration = pht(
+          'Duration: %s',
+          $event->getDuration());
+      }
+
       $item = id(new PHUIObjectItemView())
-        ->setHeader($event->getName())
-        ->setHref($href)
-        ->addByline(pht('Creator: %s', $creator_handle->renderLink()))
-        ->addAttribute(pht('From %s to %s', $from, $to))
-        ->addAttribute(id(new PhutilUTF8StringTruncator())
-          ->setMaximumGlyphs(64)
-          ->truncateString($event->getDescription()));
+        ->setHeader($viewer->renderHandle($event->getPHID())->render())
+        ->addAttribute($attendees)
+        ->addIcon('none', $from)
+        ->addIcon('none', $duration);
 
       $list->addItem($item);
     }
@@ -371,7 +391,7 @@ final class PhabricatorCalendarEventSearchEngine
       $event->setUserPHID($status->getUserPHID());
       $event->setDescription(pht('%s (%s)', $name_text, $status_text));
       $event->setName($status_text);
-      $event->setEventID($status->getID());
+      $event->setURI($status->getURI());
       $event->setViewerIsInvited($viewer_is_invited);
       $month_view->addEvent($event);
     }
@@ -423,7 +443,7 @@ final class PhabricatorCalendarEventSearchEngine
       $event->setViewerIsInvited($viewer_is_invited);
 
       $event->setName($status->getName());
-      $event->setURI('/'.$status->getMonogram());
+      $event->setURI($status->getURI());
       $day_view->addEvent($event);
     }
 
@@ -461,7 +481,11 @@ final class PhabricatorCalendarEventSearchEngine
   }
 
   public function getPageSize(PhabricatorSavedQuery $saved) {
-    return $saved->getParameter('limit', 1000);
+    if ($this->isMonthView($saved) || $this->isDayView($saved)) {
+      return $saved->getParameter('limit', 1000);
+    } else {
+      return $saved->getParameter('limit', 100);
+    }
   }
 
   private function getDateFrom(PhabricatorSavedQuery $saved) {
