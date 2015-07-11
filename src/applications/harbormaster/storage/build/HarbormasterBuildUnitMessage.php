@@ -15,7 +15,7 @@ final class HarbormasterBuildUnitMessage
 
   public static function initializeNewUnitMessage(
     HarbormasterBuildTarget $build_target) {
-    return id(new HarbormasterBuildLintMessage())
+    return id(new HarbormasterBuildUnitMessage())
       ->setBuildTargetPHID($build_target->getPHID());
   }
 
@@ -30,9 +30,9 @@ final class HarbormasterBuildUnitMessage
       'namespace' => 'optional string',
       'name' => 'string',
       'result' => 'string',
-      'duration' => 'optional float',
+      'duration' => 'optional float|int',
       'path' => 'optional string',
-      'coverage' => 'optional string',
+      'coverage' => 'optional map<string, wild>',
     );
 
     // We're just going to ignore extra keys for now, to make it easier to
@@ -44,7 +44,7 @@ final class HarbormasterBuildUnitMessage
     $obj->setNamespace(idx($dict, 'namespace', ''));
     $obj->setName($dict['name']);
     $obj->setResult($dict['result']);
-    $obj->setDuration(idx($dict, 'duration'));
+    $obj->setDuration((float)idx($dict, 'duration'));
 
     $path = idx($dict, 'path');
     if (strlen($path)) {
@@ -52,7 +52,7 @@ final class HarbormasterBuildUnitMessage
     }
 
     $coverage = idx($dict, 'coverage');
-    if (strlen($coverage)) {
+    if ($coverage) {
       $obj->setProperty('coverage', $coverage);
     }
 
@@ -95,6 +95,28 @@ final class HarbormasterBuildUnitMessage
   public function setProperty($key, $value) {
     $this->properties[$key] = $value;
     return $this;
+  }
+
+  public function getSortKey() {
+    // TODO: Maybe use more numeric values after T6861.
+    $map = array(
+      ArcanistUnitTestResult::RESULT_FAIL => 'A',
+      ArcanistUnitTestResult::RESULT_BROKEN => 'B',
+      ArcanistUnitTestResult::RESULT_UNSOUND => 'C',
+      ArcanistUnitTestResult::RESULT_PASS => 'Z',
+    );
+
+    $result = idx($map, $this->getResult(), 'N');
+
+    $parts = array(
+      $result,
+      $this->getEngine(),
+      $this->getNamespace(),
+      $this->getName(),
+      $this->getID(),
+    );
+
+    return implode("\0", $parts);
   }
 
 }

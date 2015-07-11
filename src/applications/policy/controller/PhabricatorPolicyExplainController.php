@@ -3,24 +3,15 @@
 final class PhabricatorPolicyExplainController
   extends PhabricatorPolicyController {
 
-  private $phid;
-  private $capability;
-
   public function shouldAllowPublic() {
     return true;
   }
 
-  public function willProcessRequest(array $data) {
-    $this->phid = $data['phid'];
-    $this->capability = $data['capability'];
-  }
+  public function handleRequest(AphrontRequest $request) {
+    $viewer = $this->getViewer();
 
-  public function processRequest() {
-    $request = $this->getRequest();
-    $viewer = $request->getUser();
-
-    $phid = $this->phid;
-    $capability = $this->capability;
+    $phid = $request->getURIData('phid');
+    $capability = $request->getURIData('capability');
 
     $object = id(new PhabricatorObjectQuery())
       ->setViewer($viewer)
@@ -56,13 +47,6 @@ final class PhabricatorPolicyExplainController
       $auto_info);
     $auto_info = array_filter($auto_info);
 
-    foreach ($auto_info as $key => $info) {
-      $auto_info[$key] = phutil_tag('li', array(), $info);
-    }
-    if ($auto_info) {
-      $auto_info = phutil_tag('ul', array(), $auto_info);
-    }
-
     $capability_name = $capability;
     $capobj = PhabricatorPolicyCapability::getCapabilityByKey($capability);
     if ($capobj) {
@@ -84,11 +68,18 @@ final class PhabricatorPolicyExplainController
       $handle->getTypeName(),
       $handle->getObjectName());
 
-    return $dialog
+    $dialog
       ->setTitle(pht('Policy Details: %s', $object_name))
       ->appendParagraph($intro)
-      ->appendChild($auto_info)
       ->addCancelButton($object_uri, pht('Done'));
+
+    if ($auto_info) {
+      $dialog->appendList($auto_info);
+    }
+
+    $this->appendStrengthInformation($dialog, $object, $policy, $capability);
+
+    return $dialog;
   }
 
   private function appendSpaceInformation(
@@ -153,12 +144,8 @@ final class PhabricatorPolicyExplainController
     $items = array();
     $items[] = $space_explanation;
 
-    foreach ($items as $key => $item) {
-      $items[$key] = phutil_tag('li', array(), $item);
-    }
-
     $dialog->appendParagraph(pht('Users who can see objects in this space:'));
-    $dialog->appendChild(phutil_tag('ul', array(), $items));
+    $dialog->appendList($items);
 
     $view_capability = PhabricatorPolicyCapability::CAN_VIEW;
     if ($capability == $view_capability) {
@@ -178,6 +165,48 @@ final class PhabricatorPolicyExplainController
       pht(
         'After a user passes space policy checks, they must still pass '.
         'object policy checks.'));
+  }
+
+  private function appendStrengthInformation(
+    AphrontDialogView $dialog,
+    PhabricatorPolicyInterface $object,
+    PhabricatorPolicy $policy,
+    $capability) {
+    $viewer = $this->getViewer();
+
+    $default_policy = PhabricatorPolicyQuery::getDefaultPolicyForObject(
+      $viewer,
+      $object,
+      $capability);
+    if (!$default_policy) {
+      return;
+    }
+
+    if ($default_policy->getPHID() == $policy->getPHID()) {
+      return;
+    }
+
+    if ($default_policy->isStrongerThan($policy)) {
+      $info = pht(
+        'This object has a less restrictive policy ("%s") than the default '.
+        'policy for similar objects (which is "%s").',
+        $policy->getShortName(),
+        $default_policy->getShortName());
+    } else if ($policy->isStrongerThan($default_policy)) {
+      $info = pht(
+        'This object has a more restrictive policy ("%s") than the default '.
+        'policy for similar objects (which is "%s").',
+        $policy->getShortName(),
+        $default_policy->getShortName());
+    } else {
+      $info = pht(
+        'This object has a different policy ("%s") than the default policy '.
+        'for similar objects (which is "%s").',
+        $policy->getShortName(),
+        $default_policy->getShortName());
+    }
+
+    $dialog->appendParagraph($info);
   }
 
 }
