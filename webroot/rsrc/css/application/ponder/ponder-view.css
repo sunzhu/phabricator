@@ -1,0 +1,59 @@
+/**
+ * @provides ponder-view-css
+ */
+
+.ponder-votable {
+  float: right;
+  margin: 4px 0 4px 24px;
+}
+
+.ponder-votebox {
+  border-radius: 4px;
+  background: #f3f3f3;
+  border: 1px solid {$blueborder};
+  text-align: center;
+  width: 24px;
+}
+
+.ponder-votebox a {
+  font-size: 20px;
+  line-height: 24px;
+  display: block;
+
+  text-decoration: none;
+  color: #aaaaaa;
+  font-weight: normal;
+}
+
+.ponder-votebox a.ponder-vote-active {
+  color: {$blue};
+}
+
+.ponder-votebox a:hover {
+  color: #ffffff;
+  background: {$blue};
+}
+
+.ponder-vote-count {
+  color: {$darkbluetext};
+  font-size: {$biggerfontsize};
+  line-height: 20px;
+  font-weight: bold;
+}
+
+.ponder-show-comments {
+  text-align: center;
+  padding: 8px;
+  margin: 0 16px;
+  float: right;
+  font-weight: bold;
+  background: #fff;
+  border-bottom: 1px solid {$blueborder};
+  border-left: 1px solid {$lightblueborder};
+  border-right: 1px solid {$lightblueborder};
+}
+
+.device-desktop .ponder-comments-view {
+  width: 90%;
+  margin: 0 auto;
+}

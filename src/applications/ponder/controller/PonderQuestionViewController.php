@@ -2,20 +2,13 @@
 
 final class PonderQuestionViewController extends PonderController {
 
-  private $questionID;
-
-  public function willProcessRequest(array $data) {
-    $this->questionID = $data['id'];
-  }
-
-  public function processRequest() {
-
-    $request = $this->getRequest();
-    $user = $request->getUser();
+  public function handleRequest(AphrontRequest $request) {
+    $viewer = $request->getViewer();
+    $id = $request->getURIData('id');
 
     $question = id(new PonderQuestionQuery())
-      ->setViewer($user)
-      ->withIDs(array($this->questionID))
+      ->setViewer($viewer)
+      ->withIDs(array($id))
       ->needAnswers(true)
       ->needViewerVotes(true)
       ->executeOne();
@@ -23,15 +16,15 @@ final class PonderQuestionViewController extends PonderController {
       return new Aphront404Response();
     }
 
-    $question->attachVotes($user->getPHID());
+    $question->attachVotes($viewer->getPHID());
 
     $question_xactions = $this->buildQuestionTransactions($question);
     $answers = $this->buildAnswers($question->getAnswers());
 
     $authors = mpull($question->getAnswers(), null, 'getAuthorPHID');
-    if (isset($authors[$user->getPHID()])) {
+    if (isset($authors[$viewer->getPHID()])) {
       $answer_add_panel = id(new PHUIInfoView())
-        ->setSeverity(PHUIInfoView::SEVERITY_NODATA)
+        ->setSeverity(PHUIInfoView::SEVERITY_NOTICE)
         ->appendChild(
           pht(
             'You have already answered this question. You can not answer '.
@@ -40,12 +33,14 @@ final class PonderQuestionViewController extends PonderController {
       $answer_add_panel = new PonderAddAnswerView();
       $answer_add_panel
         ->setQuestion($question)
-        ->setUser($user)
+        ->setUser($viewer)
         ->setActionURI('/ponder/answer/add/');
     }
 
-    $header = id(new PHUIHeaderView())
-      ->setHeader($question->getTitle());
+    $header = new PHUIHeaderView();
+    $header->setHeader($question->getTitle());
+    $header->setUser($viewer);
+    $header->setPolicyObject($question);
 
     if ($question->getStatus() == PonderQuestionStatus::STATUS_OPEN) {
       $header->setStatus('fa-square-o', 'bluegrey', pht('Open'));
@@ -61,15 +56,24 @@ final class PonderQuestionViewController extends PonderController {
       ->addPropertyList($properties);
 
     $crumbs = $this->buildApplicationCrumbs($this->buildSideNavView());
-    $crumbs->addTextCrumb('Q'.$this->questionID, '/Q'.$this->questionID);
+    $crumbs->addTextCrumb('Q'.$id, '/Q'.$id);
 
-    return $this->buildApplicationPage(
+    $ponder_view = phutil_tag(
+      'div',
+      array(
+        'class' => 'ponder-question-view',
+      ),
       array(
         $crumbs,
         $object_box,
         $question_xactions,
         $answers,
         $answer_add_panel,
+      ));
+
+    return $this->buildApplicationPage(
+      array(
+        $ponder_view,
       ),
       array(
         'title' => 'Q'.$question->getID().' '.$question->getTitle(),
@@ -80,9 +84,8 @@ final class PonderQuestionViewController extends PonderController {
   }
 
   private function buildActionListView(PonderQuestion $question) {
+    $viewer = $this->getViewer();
     $request = $this->getRequest();
-    $viewer = $request->getUser();
-
     $id = $question->getID();
 
     $can_edit = PhabricatorPolicyFilter::hasCapability(
@@ -91,7 +94,7 @@ final class PonderQuestionViewController extends PonderController {
       PhabricatorPolicyCapability::CAN_EDIT);
 
     $view = id(new PhabricatorActionListView())
-      ->setUser($request->getUser())
+      ->setUser($viewer)
       ->setObject($question)
       ->setObjectURI($request->getRequestURI());
 
@@ -135,15 +138,11 @@ final class PonderQuestionViewController extends PonderController {
     PonderQuestion $question,
     PhabricatorActionListView $actions) {
 
-    $viewer = $this->getRequest()->getUser();
+    $viewer = $this->getViewer();
     $view = id(new PHUIPropertyListView())
       ->setUser($viewer)
       ->setObject($question)
       ->setActionList($actions);
-
-    $view->addProperty(
-      pht('Status'),
-      PonderQuestionStatus::getQuestionStatusFullName($question->getStatus()));
 
     $view->addProperty(
       pht('Author'),
@@ -214,8 +213,7 @@ final class PonderQuestionViewController extends PonderController {
    * standard fashion. This is necessary to scale this application.
    */
   private function buildAnswers(array $answers) {
-    $request = $this->getRequest();
-    $viewer = $request->getUser();
+    $viewer = $this->getViewer();
 
     $out = array();
 
@@ -288,9 +286,8 @@ final class PonderQuestionViewController extends PonderController {
   }
 
   private function buildAnswerActions(PonderAnswer $answer) {
+    $viewer = $this->getViewer();
     $request = $this->getRequest();
-    $viewer = $request->getUser();
-
     $id = $answer->getID();
 
     $can_edit = PhabricatorPolicyFilter::hasCapability(
@@ -299,7 +296,7 @@ final class PonderQuestionViewController extends PonderController {
       PhabricatorPolicyCapability::CAN_EDIT);
 
     $view = id(new PhabricatorActionListView())
-      ->setUser($request->getUser())
+      ->setUser($viewer)
       ->setObject($answer)
       ->setObjectURI($request->getRequestURI());
 
@@ -324,7 +321,7 @@ final class PonderQuestionViewController extends PonderController {
     PonderAnswer $answer,
     PhabricatorActionListView $actions) {
 
-    $viewer = $this->getRequest()->getUser();
+    $viewer = $this->getViewer();
     $view = id(new PHUIPropertyListView())
       ->setUser($viewer)
       ->setObject($answer)
@@ -371,7 +368,7 @@ final class PonderQuestionViewController extends PonderController {
     $hide_id = celerity_generate_unique_node_id();
 
     Javelin::initBehavior('phabricator-reveal-content');
-    require_celerity_resource('ponder-comment-table-css');
+    require_celerity_resource('ponder-view-css');
 
     $show = phutil_tag(
       'div',
@@ -394,6 +391,7 @@ final class PonderQuestionViewController extends PonderController {
     $hide = phutil_tag(
       'div',
       array(
+        'class' => 'ponder-comments-view',
         'id' => $hide_id,
         'style' => 'display: none',
       ),

@@ -11,36 +11,23 @@ final class PonderQuestionSearchEngine
     return 'PhabricatorPonderApplication';
   }
 
-  public function buildSavedQueryFromRequest(AphrontRequest $request) {
-    $saved = new PhabricatorSavedQuery();
-
-    $saved->setParameter(
-      'authorPHIDs',
-      $this->readUsersFromRequest($request, 'authors'));
-
-    $saved->setParameter(
-      'answererPHIDs',
-      $this->readUsersFromRequest($request, 'answerers'));
-
-    $saved->setParameter('status', $request->getStr('status'));
-
-    return $saved;
+  public function newQuery() {
+    return id(new PonderQuestionQuery())
+      ->needProjectPHIDs(true);
   }
 
-  public function buildQueryFromSavedQuery(PhabricatorSavedQuery $saved) {
-    $query = id(new PonderQuestionQuery());
+  protected function buildQueryFromParameters(array $map) {
+    $query = $this->newQuery();
 
-    $author_phids = $saved->getParameter('authorPHIDs');
-    if ($author_phids) {
-      $query->withAuthorPHIDs($author_phids);
+    if ($map['authorPHIDs']) {
+      $query->withAuthorPHIDs($map['authorPHIDs']);
     }
 
-    $answerer_phids = $saved->getParameter('answererPHIDs');
-    if ($answerer_phids) {
-      $query->withAnswererPHIDs($answerer_phids);
+    if ($map['answerers']) {
+      $query->withAnswererPHIDs($map['answerers']);
     }
 
-    $status = $saved->getParameter('status');
+    $status = $map['status'];
     if ($status != null) {
       switch ($status) {
         case 0:
@@ -55,34 +42,21 @@ final class PonderQuestionSearchEngine
     return $query;
   }
 
-  public function buildSearchForm(
-    AphrontFormView $form,
-    PhabricatorSavedQuery $saved_query) {
-
-    $author_phids = $saved_query->getParameter('authorPHIDs', array());
-    $answerer_phids = $saved_query->getParameter('answererPHIDs', array());
-    $status = $saved_query->getParameter(
-      'status', PonderQuestionStatus::STATUS_OPEN);
-
-    $form
-      ->appendControl(
-        id(new AphrontFormTokenizerControl())
-          ->setDatasource(new PhabricatorPeopleDatasource())
-          ->setName('authors')
-          ->setLabel(pht('Authors'))
-          ->setValue($author_phids))
-      ->appendControl(
-        id(new AphrontFormTokenizerControl())
-          ->setDatasource(new PhabricatorPeopleDatasource())
-          ->setName('answerers')
-          ->setLabel(pht('Answered By'))
-          ->setValue($answerer_phids))
-      ->appendChild(
-        id(new AphrontFormSelectControl())
-          ->setLabel(pht('Status'))
-          ->setName('status')
-          ->setValue($status)
-          ->setOptions(PonderQuestionStatus::getQuestionStatusMap()));
+  protected function buildCustomSearchFields() {
+    return array(
+      id(new PhabricatorUsersSearchField())
+        ->setKey('authorPHIDs')
+        ->setAliases(array('authors'))
+        ->setLabel(pht('Authors')),
+      id(new PhabricatorUsersSearchField())
+        ->setKey('answerers')
+        ->setAliases(array('answerers'))
+        ->setLabel(pht('Answered By')),
+      id(new PhabricatorSearchSelectField())
+        ->setLabel(pht('Status'))
+        ->setKey('status')
+        ->setOptions(PonderQuestionStatus::getQuestionStatusMap()),
+    );
   }
 
   protected function getURI($path) {
@@ -104,7 +78,6 @@ final class PonderQuestionSearchEngine
   }
 
   public function buildSavedQueryFromBuiltin($query_key) {
-
     $query = $this->newSavedQuery();
     $query->setQueryKey($query_key);
 
@@ -140,6 +113,18 @@ final class PonderQuestionSearchEngine
 
     $viewer = $this->requireViewer();
 
+    $proj_phids = array();
+    foreach ($questions as $question) {
+      foreach ($question->getProjectPHIDs() as $project_phid) {
+        $proj_phids[] = $project_phid;
+      }
+    }
+
+    $proj_handles = id(new PhabricatorHandleQuery())
+      ->setViewer($viewer)
+      ->withPHIDs($proj_phids)
+      ->execute();
+
     $view = id(new PHUIObjectItemListView())
       ->setUser($viewer);
 
@@ -157,6 +142,10 @@ final class PonderQuestionSearchEngine
       $item->setObject($question);
       $item->setStatusIcon($icon.' '.$color, $full_status);
 
+      $project_handles = array_select_keys(
+        $proj_handles,
+        $question->getProjectPHIDs());
+
       $created_date = phabricator_date($question->getDateCreated(), $viewer);
       $item->addIcon('none', $created_date);
       $item->addByline(
@@ -166,6 +155,14 @@ final class PonderQuestionSearchEngine
 
       $item->addAttribute(
         pht('%d Answer(s)', $question->getAnswerCount()));
+
+      if ($project_handles) {
+        $item->addAttribute(
+          id(new PHUIHandleTagListView())
+            ->setLimit(4)
+            ->setSlim(true)
+            ->setHandles($project_handles));
+      }
 
       $view->addItem($item);
     }
