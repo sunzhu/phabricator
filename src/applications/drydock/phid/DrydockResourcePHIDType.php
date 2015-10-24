@@ -8,6 +8,14 @@ final class DrydockResourcePHIDType extends PhabricatorPHIDType {
     return pht('Drydock Resource');
   }
 
+  public function getPHIDTypeApplicationClass() {
+    return 'PhabricatorDrydockApplication';
+  }
+
+  public function getTypeIcon() {
+    return 'fa-map';
+  }
+
   public function newObject() {
     return new DrydockResource();
   }
@@ -29,7 +37,12 @@ final class DrydockResourcePHIDType extends PhabricatorPHIDType {
       $resource = $objects[$phid];
       $id = $resource->getID();
 
-      $handle->setName($resource->getName());
+      $handle->setName(
+        pht(
+          'Resource %d: %s',
+          $id,
+          $resource->getResourceName()));
+
       $handle->setURI("/drydock/resource/{$id}/");
     }
   }
