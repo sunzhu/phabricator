@@ -126,7 +126,7 @@ abstract class PhabricatorStorageManagementWorkflow
           "documentation.\n\n".
           "MySQL needs to copy table data to make some adjustments, so these ".
           "migrations may take some time.",
-          new PhutilNumber(count($adjustments))));
+          phutil_count($adjustments)));
 
       $prompt = pht('Fix these schema issues?');
       if (!phutil_console_confirm($prompt, $default_no = true)) {
@@ -633,7 +633,7 @@ abstract class PhabricatorStorageManagementWorkflow
       if ($any_surplus) {
         $message[] = pht(
           'Some of these errors are caused by surplus schemata (extra '.
-          'tables or columsn which Phabricator does not expect). These are '.
+          'tables or columns which Phabricator does not expect). These are '.
           'not serious. For information on resolving these issues, see the '.
           '"Surplus Schemata" section in the "Managing Storage Adjustments" '.
           'article in the documentation.');

@@ -12,6 +12,10 @@ final class HarbormasterBuildStepPHIDType extends PhabricatorPHIDType {
     return new HarbormasterBuildStep();
   }
 
+  public function getPHIDTypeApplicationClass() {
+    return 'PhabricatorHarbormasterApplication';
+  }
+
   protected function buildQueryForObjects(
     PhabricatorObjectQuery $query,
     array $phids) {
@@ -34,7 +38,7 @@ final class HarbormasterBuildStepPHIDType extends PhabricatorPHIDType {
       $handle
         ->setName($name)
         ->setFullName(pht('Build Step %d: %s', $id, $name))
-        ->setURI("/harbormaster/step/{$id}/edit/");
+        ->setURI("/harbormaster/step/view/{$id}/");
     }
   }
 

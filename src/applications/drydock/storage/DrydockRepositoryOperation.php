@@ -99,7 +99,7 @@ final class DrydockRepositoryOperation extends DrydockDAO
   public static function getOperationStateIcon($state) {
     $map = array(
       self::STATE_WAIT => 'fa-clock-o',
-      self::STATE_WORK => 'fa-refresh blue',
+      self::STATE_WORK => 'fa-plane ph-spin blue',
       self::STATE_DONE => 'fa-check green',
       self::STATE_FAIL => 'fa-times red',
     );
@@ -141,6 +141,48 @@ final class DrydockRepositoryOperation extends DrydockDAO
       $this,
       $viewer);
   }
+
+  public function getOperationCurrentStatus(PhabricatorUser $viewer) {
+    return $this->getImplementation()->getOperationCurrentStatus(
+      $this,
+      $viewer);
+  }
+
+  public function isUnderway() {
+    switch ($this->getOperationState()) {
+      case self::STATE_WAIT:
+      case self::STATE_WORK:
+        return true;
+    }
+
+    return false;
+  }
+
+  public function isDone() {
+    return ($this->getOperationState() === self::STATE_DONE);
+  }
+
+  public function getWorkingCopyMerges() {
+    return $this->getImplementation()->getWorkingCopyMerges(
+      $this);
+  }
+
+  public function setWorkingCopyLeasePHID($lease_phid) {
+    return $this->setProperty('exec.leasePHID', $lease_phid);
+  }
+
+  public function getWorkingCopyLeasePHID() {
+    return $this->getProperty('exec.leasePHID');
+  }
+
+  public function setWorkingCopyVCSError(array $error) {
+    return $this->setProperty('exec.workingcopy.error', $error);
+  }
+
+  public function getWorkingCopyVCSError() {
+    return $this->getProperty('exec.workingcopy.error');
+  }
+
 
 
 /* -(  PhabricatorPolicyInterface  )----------------------------------------- */
