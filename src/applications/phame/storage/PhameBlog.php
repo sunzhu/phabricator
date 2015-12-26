@@ -7,10 +7,10 @@ final class PhameBlog extends PhameDAO
     PhabricatorSubscribableInterface,
     PhabricatorFlaggableInterface,
     PhabricatorProjectInterface,
+    PhabricatorDestructibleInterface,
     PhabricatorApplicationTransactionInterface {
 
   const MARKUP_FIELD_DESCRIPTION = 'markup:description';
-
   const SKIN_DEFAULT = 'oblivious';
 
   protected $name;
@@ -20,9 +20,15 @@ final class PhameBlog extends PhameDAO
   protected $creatorPHID;
   protected $viewPolicy;
   protected $editPolicy;
+  protected $status;
   protected $mailKey;
+  protected $profileImagePHID;
 
+  private $profileImageFile = self::ATTACHABLE;
   private static $requestBlog;
+
+  const STATUS_ACTIVE = 'active';
+  const STATUS_ARCHIVED = 'archived';
 
   protected function getConfiguration() {
     return array(
@@ -34,7 +40,9 @@ final class PhameBlog extends PhameDAO
         'name' => 'text64',
         'description' => 'text',
         'domain' => 'text128?',
+        'status' => 'text32',
         'mailKey' => 'bytes20',
+        'profileImagePHID' => 'phid?',
 
         // T6203/NULLABILITY
         // These policies should always be non-null.
@@ -70,6 +78,7 @@ final class PhameBlog extends PhameDAO
   public static function initializeNewBlog(PhabricatorUser $actor) {
     $blog = id(new PhameBlog())
       ->setCreatorPHID($actor->getPHID())
+      ->setStatus(self::STATUS_ACTIVE)
       ->setViewPolicy(PhabricatorPolicies::getMostOpenPolicy())
       ->setEditPolicy(PhabricatorPolicies::POLICY_USER);
     return $blog;
@@ -96,6 +105,17 @@ final class PhameBlog extends PhameDAO
     $skin->setSpecification($spec);
 
     return $skin;
+  }
+
+  public function isArchived() {
+    return ($this->getStatus() == self::STATUS_ARCHIVED);
+  }
+
+  public static function getStatusNameMap() {
+    return array(
+      self::STATUS_ACTIVE => pht('Active'),
+      self::STATUS_ARCHIVED => pht('Archived'),
+    );
   }
 
   /**
@@ -225,6 +245,19 @@ final class PhameBlog extends PhameDAO
     return PhabricatorEnv::getProductionURI($uri);
   }
 
+  public function getProfileImageURI() {
+    return $this->getProfileImageFile()->getBestURI();
+  }
+
+  public function attachProfileImageFile(PhabricatorFile $file) {
+    $this->profileImageFile = $file;
+    return $this;
+  }
+
+  public function getProfileImageFile() {
+    return $this->assertAttached($this->profileImageFile);
+  }
+
 
 /* -(  PhabricatorPolicyInterface Implementation  )-------------------------- */
 
@@ -301,6 +334,23 @@ final class PhameBlog extends PhameDAO
 
   public function shouldUseMarkupCache($field) {
     return (bool)$this->getPHID();
+  }
+
+/* -(  PhabricatorDestructibleInterface  )----------------------------------- */
+
+  public function destroyObjectPermanently(
+    PhabricatorDestructionEngine $engine) {
+
+    $this->openTransaction();
+
+      $posts = id(new PhamePost())
+        ->loadAllWhere('blogPHID = %s', $this->getPHID());
+      foreach ($posts as $post) {
+        $post->delete();
+      }
+      $this->delete();
+
+    $this->saveTransaction();
   }
 
 

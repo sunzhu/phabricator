@@ -8,6 +8,8 @@ final class PhabricatorEditEngineConfigurationQuery
   private $engineKeys;
   private $builtinKeys;
   private $identifiers;
+  private $default;
+  private $disabled;
 
   public function withIDs(array $ids) {
     $this->ids = $ids;
@@ -31,6 +33,16 @@ final class PhabricatorEditEngineConfigurationQuery
 
   public function withIdentifiers(array $identifiers) {
     $this->identifiers = $identifiers;
+    return $this;
+  }
+
+  public function withIsDefault($default) {
+    $this->default = $default;
+    return $this;
+  }
+
+  public function withIsDisabled($disabled) {
+    $this->disabled = $disabled;
     return $this;
   }
 
@@ -118,6 +130,22 @@ final class PhabricatorEditEngineConfigurationQuery
       }
     }
 
+    if ($this->default !== null) {
+      foreach ($page as $key => $config) {
+        if ($config->getIsDefault() != $this->default) {
+          unset($page[$key]);
+        }
+      }
+    }
+
+    if ($this->disabled !== null) {
+      foreach ($page as $key => $config) {
+        if ($config->getIsDisabled() != $this->disabled) {
+          unset($page[$key]);
+        }
+      }
+    }
+
     if ($this->identifiers !== null) {
       $identifiers = array_fuse($this->identifiers);
       foreach ($page as $key => $config) {
@@ -132,6 +160,31 @@ final class PhabricatorEditEngineConfigurationQuery
     }
 
     return $page;
+  }
+
+  protected function willFilterPage(array $configs) {
+    $engine_keys = mpull($configs, 'getEngineKey');
+
+    $engines = id(new PhabricatorEditEngineQuery())
+      ->setParentQuery($this)
+      ->setViewer($this->getViewer())
+      ->withEngineKeys($engine_keys)
+      ->execute();
+    $engines = mpull($engines, null, 'getEngineKey');
+
+    foreach ($configs as $key => $config) {
+      $engine = idx($engines, $config->getEngineKey());
+
+      if (!$engine) {
+        $this->didRejectResult($config);
+        unset($configs[$key]);
+        continue;
+      }
+
+      $config->attachEngine($engine);
+    }
+
+    return $configs;
   }
 
   protected function buildWhereClauseParts(AphrontDatabaseConnection $conn) {
