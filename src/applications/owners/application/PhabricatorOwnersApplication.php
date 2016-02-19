@@ -10,7 +10,7 @@ final class PhabricatorOwnersApplication extends PhabricatorApplication {
     return '/owners/';
   }
 
-  public function getFontIcon() {
+  public function getIcon() {
     return 'fa-gift';
   }
 
@@ -45,6 +45,7 @@ final class PhabricatorOwnersApplication extends PhabricatorApplication {
         '(?:query/(?P<queryKey>[^/]+)/)?' => 'PhabricatorOwnersListController',
         'new/' => 'PhabricatorOwnersEditController',
         'package/(?P<id>[1-9]\d*)/' => 'PhabricatorOwnersDetailController',
+        'archive/(?P<id>[1-9]\d*)/' => 'PhabricatorOwnersArchiveController',
         'paths/(?P<id>[1-9]\d*)/' => 'PhabricatorOwnersPathsController',
 
         $this->getEditRoutePattern('edit/')

@@ -11,7 +11,7 @@ final class PhabricatorUIConfigOptions
     return pht('Configure the Phabricator UI, including colors.');
   }
 
-  public function getFontIcon() {
+  public function getIcon() {
     return 'fa-magnet';
   }
 
@@ -20,15 +20,17 @@ final class PhabricatorUIConfigOptions
   }
 
   public function getOptions() {
-    $manifest = PHUIIconView::getSheetManifest('main-header');
     $custom_header_example =
       PhabricatorCustomHeaderConfigType::getExampleConfig();
     $experimental_link = 'https://secure.phabricator.com/T4214';
-    $options = array();
-    foreach (array_keys($manifest) as $sprite_name) {
-      $key = substr($sprite_name, strlen('main-header-'));
-      $options[$key] = $key;
-    }
+    $options = array(
+      'blindigo' => 'blindigo',
+      'red' => 'red',
+      'blue' => 'blue',
+      'green' => 'green',
+      'indigo' => 'indigo',
+      'dark' => 'dark',
+    );
 
     $example = <<<EOJSON
 [
@@ -49,7 +51,7 @@ EOJSON;
     return array(
       $this->newOption('ui.header-color', 'enum', 'blindigo')
         ->setDescription(
-          pht('Sets the color of the main header.'))
+          pht('Sets the default color scheme of Phabricator.'))
         ->setEnumOptions($options),
       $this->newOption('ui.footer-items', 'list<wild>', array())
         ->setSummary(

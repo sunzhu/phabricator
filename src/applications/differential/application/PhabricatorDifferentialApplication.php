@@ -14,7 +14,7 @@ final class PhabricatorDifferentialApplication extends PhabricatorApplication {
     return pht('Review Code');
   }
 
-  public function getFontIcon() {
+  public function getIcon() {
     return 'fa-cog';
   }
 
@@ -44,7 +44,6 @@ final class PhabricatorDifferentialApplication extends PhabricatorApplication {
   public function getEventListeners() {
     return array(
       new DifferentialActionMenuEventListener(),
-      new DifferentialHovercardEventListener(),
       new DifferentialLandingActionMenuEventListener(),
     );
   }

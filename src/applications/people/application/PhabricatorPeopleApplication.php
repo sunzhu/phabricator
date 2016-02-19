@@ -18,7 +18,7 @@ final class PhabricatorPeopleApplication extends PhabricatorApplication {
     return "\xE2\x99\x9F";
   }
 
-  public function getFontIcon() {
+  public function getIcon() {
     return 'fa-users';
   }
 
@@ -32,12 +32,6 @@ final class PhabricatorPeopleApplication extends PhabricatorApplication {
 
   public function canUninstall() {
     return false;
-  }
-
-  public function getEventListeners() {
-    return array(
-      new PhabricatorPeopleHovercardEventListener(),
-    );
   }
 
   public function getRoutes() {
@@ -68,11 +62,15 @@ final class PhabricatorPeopleApplication extends PhabricatorApplication {
           'PhabricatorPeopleProfileEditController',
         'picture/(?P<id>[1-9]\d*)/' =>
           'PhabricatorPeopleProfilePictureController',
+        'manage/(?P<id>[1-9]\d*)/' =>
+          'PhabricatorPeopleProfileManageController',
         ),
-      '/p/(?P<username>[\w._-]+)/'
-        => 'PhabricatorPeopleProfileController',
-      '/p/(?P<username>[\w._-]+)/calendar/'
-        => 'PhabricatorPeopleCalendarController',
+      '/p/(?P<username>[\w._-]+)/' => array(
+        '' => 'PhabricatorPeopleProfileViewController',
+        'panel/'
+          => $this->getPanelRouting('PhabricatorPeopleProfilePanelController'),
+        'calendar/' => 'PhabricatorPeopleCalendarController',
+      ),
     );
   }
 
@@ -128,48 +126,6 @@ final class PhabricatorPeopleApplication extends PhabricatorApplication {
 
     return $status;
   }
-
-  public function buildMainMenuItems(
-    PhabricatorUser $user,
-    PhabricatorController $controller = null) {
-
-    $items = array();
-
-    if ($user->isLoggedIn() && $user->isUserActivated()) {
-      $profile = id(new PhabricatorPeopleQuery())
-        ->setViewer($user)
-        ->needProfileImage(true)
-        ->withPHIDs(array($user->getPHID()))
-        ->executeOne();
-      $image = $profile->getProfileImageURI();
-
-      $item = id(new PHUIListItemView())
-        ->setName($user->getUsername())
-        ->setHref('/p/'.$user->getUsername().'/')
-        ->addClass('core-menu-item')
-        ->setAural(pht('Profile'))
-        ->setOrder(100);
-
-      $classes = array(
-        'phabricator-core-menu-icon',
-        'phabricator-core-menu-profile-image',
-      );
-
-      $item->appendChild(
-        phutil_tag(
-          'span',
-          array(
-            'class' => implode(' ', $classes),
-            'style' => 'background-image: url('.$image.')',
-          ),
-          ''));
-
-      $items[] = $item;
-    }
-
-    return $items;
-  }
-
 
   public function getQuickCreateItems(PhabricatorUser $viewer) {
     $items = array();

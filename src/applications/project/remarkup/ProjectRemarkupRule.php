@@ -16,7 +16,9 @@ final class ProjectRemarkupRule extends PhabricatorObjectRemarkupRule {
       return '#'.$id;
     }
 
-    return $handle->renderTag();
+    $tag = $handle->renderTag();
+    $tag->setPHID($handle->getPHID());
+    return $tag;
   }
 
   protected function getObjectIDPattern() {
@@ -32,7 +34,7 @@ final class ProjectRemarkupRule extends PhabricatorObjectRemarkupRule {
     // controlling and these names should parse correctly.
 
     // These characters may never appear anywhere in a hashtag.
-    $never = '\s?!,:;{}#\\(\\)"\'';
+    $never = '\s?!,:;{}#\\(\\)"\'\\*/~';
 
     // These characters may not appear at the edge of the string.
     $never_edge = '.';

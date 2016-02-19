@@ -33,7 +33,7 @@ final class DivinerBookController extends DivinerController {
       ->setTag('a')
       ->setText(pht('Actions'))
       ->setHref('#')
-      ->setIconFont('fa-bars')
+      ->setIcon('fa-bars')
       ->addClass('phui-mobile-menu')
       ->setDropdownMenu($actions);
 
@@ -125,8 +125,7 @@ final class DivinerBookController extends DivinerController {
 
     $action_view = id(new PhabricatorActionListView())
       ->setUser($user)
-      ->setObject($book)
-      ->setObjectURI($this->getRequest()->getRequestURI());
+      ->setObject($book);
 
     $action_view->addAction(
       id(new PhabricatorActionView())

@@ -4,7 +4,6 @@ final class PHUIIconView extends AphrontTagView {
 
   const SPRITE_TOKENS = 'tokens';
   const SPRITE_LOGIN = 'login';
-  const SPRITE_PROJECTS = 'projects';
 
   const HEAD_SMALL = 'phuihead-small';
   const HEAD_MEDIUM = 'phuihead-medium';
@@ -49,7 +48,7 @@ final class PHUIIconView extends AphrontTagView {
     return $this;
   }
 
-  public function setIconFont($icon, $color = null) {
+  public function setIcon($icon, $color = null) {
     $this->iconFont = $icon;
     $this->iconColor = $color;
     return $this;
@@ -106,7 +105,7 @@ final class PHUIIconView extends AphrontTagView {
     return idx(phutil_json_decode($data), 'sprites');
   }
 
-  public static function getFontIcons() {
+  public static function getIcons() {
     return array(
       'fa-glass',
       'fa-music',
@@ -748,7 +747,7 @@ final class PHUIIconView extends AphrontTagView {
     );
   }
 
-  public static function getFontIconColors() {
+  public static function getIconColors() {
     return array(
       'bluegrey',
       'white',
