@@ -61,21 +61,15 @@ final class DivinerMainController extends DivinerController {
         "  %s\n\n",
         'phabricator/ $ ./bin/diviner generate');
 
-      $text = PhabricatorMarkupEngine::renderOneObject(
-        id(new PhabricatorMarkupOneOff())->setContent($text),
-        'default',
-        $viewer);
-
+      $text = new PHUIRemarkupView($viewer, $text);
       $document->appendChild($text);
     }
 
-    return $this->buildApplicationPage(
-      array(
-        $crumbs,
+    return $this->newPage()
+      ->setTitle(pht('Documentation Books'))
+      ->setCrumbs($crumbs)
+      ->appendChild(array(
         $document,
-      ),
-      array(
-        'title' => pht('Documentation Books'),
       ));
   }
 }

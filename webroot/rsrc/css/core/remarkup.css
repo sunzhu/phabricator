@@ -30,7 +30,7 @@
   padding: 6px 12px;
   font-size: 13px;
   font-weight: bold;
-  background: rgba(71,87,120,0.08);
+  background: rgba({$alphablue},0.08);
   display: inline-block;
   border-top-left-radius: 3px;
   border-top-right-radius: 3px;
@@ -45,7 +45,7 @@
 }
 
 .phabricator-remarkup .remarkup-code-block pre {
-  background: rgba(71,87,120,0.08);
+  background: rgba({$alphablue},0.08);
   display: block;
   color: #000;
   overflow: auto;
@@ -59,7 +59,7 @@
 
 .phabricator-remarkup tt.remarkup-monospaced {
   color: #000;
-  background: rgba(71,87,120,0.1);
+  background: rgba({$alphablue},0.1);
   padding: 1px 4px;
   border-radius: 3px;
   white-space: pre-wrap;
@@ -97,17 +97,19 @@
   list-style: lower-roman;
 }
 
-.phabricator-remarkup ul.remarkup-list-with-checkmarks {
+.phabricator-remarkup .remarkup-list-with-checkmarks .remarkup-checked-item,
+.phabricator-remarkup .remarkup-list-with-checkmarks .remarkup-unchecked-item {
   list-style: none;
-  margin-left: 18px;
+  margin-left: -18px;
 }
 
 .phabricator-remarkup .remarkup-list-with-checkmarks input {
   margin-right: 2px;
+  opacity: 1;
 }
 
 .phabricator-remarkup .remarkup-list-with-checkmarks .remarkup-checked-item {
-  color: {$greytext};
+  text-decoration: line-through;
 }
 
 .phabricator-remarkup ul.remarkup-list ol.remarkup-list,
@@ -180,12 +182,20 @@
 }
 
 .phabricator-remarkup blockquote em {
+  /* In blockquote bodies, default text is italic so emphasized text should
+     be normal. */
   font-style: normal;
 }
 
 .phabricator-remarkup blockquote div.remarkup-reply-head {
   font-style: normal;
   padding-bottom: 4px;
+}
+
+.phabricator-remarkup blockquote div.remarkup-reply-head em {
+  /* In blockquote headers, default text is normal so emphasized text should
+     be italic. See T10686. */
+  font-style: italic;
 }
 
 .phabricator-remarkup blockquote div.remarkup-reply-head
@@ -222,6 +232,18 @@
 .aphront-panel-preview .phabricator-remarkup-mention-unknown {
   font-weight: bold;
   background: #ffaaaa;
+}
+
+.phabricator-remarkup .phriction-link {
+  font-weight: bold;
+}
+
+.phabricator-remarkup .phriction-link-missing {
+  color: {$red};
+}
+
+.phabricator-remarkup .phriction-link-lock {
+  color: {$greytext};
 }
 
 .phabricator-remarkup-mention-nopermission .phui-tag-core {
@@ -328,7 +350,7 @@
 .phabricator-remarkup-embed-image {
   display: inline-block;
   border: 3px solid white;
-  box-shadow: 1px 1px 2px rgba(0, 0, 0, 0.20);
+  box-shadow: 1px 1px 2px rgba({$alphablack}, 0.20);
 }
 
 .phabricator-remarkup-embed-image-full {

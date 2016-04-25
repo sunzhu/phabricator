@@ -45,6 +45,7 @@ final class PhabricatorRepositoryEditor
     $types[] = PhabricatorRepositoryTransaction::TYPE_SYMBOLS_SOURCES;
     $types[] = PhabricatorRepositoryTransaction::TYPE_STAGING_URI;
     $types[] = PhabricatorRepositoryTransaction::TYPE_AUTOMATION_BLUEPRINTS;
+    $types[] = PhabricatorRepositoryTransaction::TYPE_CALLSIGN;
 
     $types[] = PhabricatorTransactions::TYPE_EDGE;
     $types[] = PhabricatorTransactions::TYPE_VIEW_POLICY;
@@ -110,6 +111,8 @@ final class PhabricatorRepositoryEditor
         return $object->getDetail('staging-uri');
       case PhabricatorRepositoryTransaction::TYPE_AUTOMATION_BLUEPRINTS:
         return $object->getDetail('automation.blueprintPHIDs', array());
+      case PhabricatorRepositoryTransaction::TYPE_CALLSIGN:
+        return $object->getCallsign();
     }
   }
 
@@ -148,6 +151,7 @@ final class PhabricatorRepositoryEditor
       case PhabricatorRepositoryTransaction::TYPE_AUTOMATION_BLUEPRINTS:
         return $xaction->getNewValue();
       case PhabricatorRepositoryTransaction::TYPE_SLUG:
+      case PhabricatorRepositoryTransaction::TYPE_CALLSIGN:
         $name = $xaction->getNewValue();
         if (strlen($name)) {
           return $name;
@@ -240,26 +244,11 @@ final class PhabricatorRepositoryEditor
           'automation.blueprintPHIDs',
           $xaction->getNewValue());
         return;
+      case PhabricatorRepositoryTransaction::TYPE_CALLSIGN:
+        $object->setCallsign($xaction->getNewValue());
+        return;
       case PhabricatorRepositoryTransaction::TYPE_ENCODING:
-        // Make sure the encoding is valid by converting to UTF-8. This tests
-        // that the user has mbstring installed, and also that they didn't type
-        // a garbage encoding name. Note that we're converting from UTF-8 to
-        // the target encoding, because mbstring is fine with converting from
-        // a nonsense encoding.
-        $encoding = $xaction->getNewValue();
-        if (strlen($encoding)) {
-          try {
-            phutil_utf8_convert('.', $encoding, 'UTF-8');
-          } catch (Exception $ex) {
-            throw new PhutilProxyException(
-              pht(
-                "Error setting repository encoding '%s': %s'",
-                $encoding,
-                $ex->getMessage()),
-              $ex);
-          }
-        }
-        $object->setDetail('encoding', $encoding);
+        $object->setDetail('encoding', $xaction->getNewValue());
         break;
     }
   }
@@ -454,6 +443,117 @@ final class PhabricatorRepositoryEditor
         }
         break;
 
+      case PhabricatorRepositoryTransaction::TYPE_VCS:
+        $vcs_map = PhabricatorRepositoryType::getAllRepositoryTypes();
+        $current_vcs = $object->getVersionControlSystem();
+
+        if (!$this->getIsNewObject()) {
+          foreach ($xactions as $xaction) {
+            if ($xaction->getNewValue() == $current_vcs) {
+              continue;
+            }
+
+            $errors[] = new PhabricatorApplicationTransactionValidationError(
+              $type,
+              pht('Immutable'),
+              pht(
+                'You can not change the version control system an existing '.
+                'repository uses. It can only be set when a repository is '.
+                'first created.'),
+              $xaction);
+          }
+        } else {
+          $value = $object->getVersionControlSystem();
+          foreach ($xactions as $xaction) {
+            $value = $xaction->getNewValue();
+
+            if (empty($vcs_map[$value])) {
+              $errors[] = new PhabricatorApplicationTransactionValidationError(
+                $type,
+                pht('Invalid'),
+                pht(
+                  'Specified version control system must be a VCS '.
+                  'recognized by Phabricator: %s.',
+                  implode(', ', array_keys($vcs_map))),
+                $xaction);
+            }
+          }
+
+          if (!strlen($value)) {
+            $error = new PhabricatorApplicationTransactionValidationError(
+              $type,
+              pht('Required'),
+              pht(
+                'When creating a repository, you must specify a valid '.
+                'underlying version control system: %s.',
+                implode(', ', array_keys($vcs_map))),
+              nonempty(last($xactions), null));
+            $error->setIsMissingFieldError(true);
+            $errors[] = $error;
+          }
+        }
+        break;
+
+      case PhabricatorRepositoryTransaction::TYPE_NAME:
+        $missing = $this->validateIsEmptyTextField(
+          $object->getName(),
+          $xactions);
+
+        if ($missing) {
+          $error = new PhabricatorApplicationTransactionValidationError(
+            $type,
+            pht('Required'),
+            pht('Repository name is required.'),
+            nonempty(last($xactions), null));
+
+          $error->setIsMissingFieldError(true);
+          $errors[] = $error;
+        }
+        break;
+
+      case PhabricatorRepositoryTransaction::TYPE_ACTIVATE:
+        $status_map = PhabricatorRepository::getStatusMap();
+        foreach ($xactions as $xaction) {
+          $status = $xaction->getNewValue();
+          if (empty($status_map[$status])) {
+            $errors[] = new PhabricatorApplicationTransactionValidationError(
+              $type,
+              pht('Invalid'),
+              pht(
+                'Repository status "%s" is not valid.',
+                $status),
+              $xaction);
+          }
+        }
+        break;
+
+      case PhabricatorRepositoryTransaction::TYPE_ENCODING:
+        foreach ($xactions as $xaction) {
+          // Make sure the encoding is valid by converting to UTF-8. This tests
+          // that the user has mbstring installed, and also that they didn't
+          // type a garbage encoding name. Note that we're converting from
+          // UTF-8 to the target encoding, because mbstring is fine with
+          // converting from a nonsense encoding.
+          $encoding = $xaction->getNewValue();
+          if (!strlen($encoding)) {
+            continue;
+          }
+
+          try {
+            phutil_utf8_convert('.', $encoding, 'UTF-8');
+          } catch (Exception $ex) {
+            $errors[] = new PhabricatorApplicationTransactionValidationError(
+              $type,
+              pht('Invalid'),
+              pht(
+                'Repository encoding "%s" is not valid: %s',
+                $encoding,
+                $ex->getMessage()),
+              $xaction);
+          }
+        }
+        break;
+
       case PhabricatorRepositoryTransaction::TYPE_SLUG:
         foreach ($xactions as $xaction) {
           $old = $xaction->getOldValue();
@@ -468,7 +568,7 @@ final class PhabricatorRepositoryEditor
           }
 
           try {
-            PhabricatorRepository::asssertValidRepositorySlug($new);
+            PhabricatorRepository::assertValidRepositorySlug($new);
           } catch (Exception $ex) {
             $errors[] = new PhabricatorApplicationTransactionValidationError(
               $type,
@@ -495,6 +595,47 @@ final class PhabricatorRepositoryEditor
         }
         break;
 
+      case PhabricatorRepositoryTransaction::TYPE_CALLSIGN:
+        foreach ($xactions as $xaction) {
+          $old = $xaction->getOldValue();
+          $new = $xaction->getNewValue();
+
+          if (!strlen($new)) {
+            continue;
+          }
+
+          if ($new === $old) {
+            continue;
+          }
+
+          try {
+            PhabricatorRepository::assertValidCallsign($new);
+          } catch (Exception $ex) {
+            $errors[] = new PhabricatorApplicationTransactionValidationError(
+              $type,
+              pht('Invalid'),
+              $ex->getMessage(),
+              $xaction);
+            continue;
+          }
+
+          $other = id(new PhabricatorRepositoryQuery())
+            ->setViewer(PhabricatorUser::getOmnipotentUser())
+            ->withCallsigns(array($new))
+            ->executeOne();
+          if ($other && ($other->getID() !== $object->getID())) {
+            $errors[] = new PhabricatorApplicationTransactionValidationError(
+              $type,
+              pht('Duplicate'),
+              pht(
+                'The selected callsign ("%s") is already in use by another '.
+                'repository. Choose a unique callsign.',
+                $new),
+              $xaction);
+            continue;
+          }
+        }
+        break;
     }
 
     return $errors;
@@ -520,6 +661,33 @@ final class PhabricatorRepositoryEditor
 
   protected function supportsSearch() {
     return true;
+  }
+
+  protected function applyFinalEffects(
+    PhabricatorLiskDAO $object,
+    array $xactions) {
+
+    // If the repository does not have a local path yet, assign it one based
+    // on its ID. We can't do this earlier because we won't have an ID yet.
+    $local_path = $object->getDetail('local-path');
+    if (!strlen($local_path)) {
+      $local_key = 'repository.default-local-path';
+
+      $local_root = PhabricatorEnv::getEnvConfig($local_key);
+      $local_root = rtrim($local_root, '/');
+
+      $id = $object->getID();
+      $local_path = "{$local_root}/{$id}/";
+
+      $object->setDetail('local-path', $local_path);
+      $object->save();
+    }
+
+    if ($this->getIsNewObject()) {
+      $object->synchronizeWorkingCopyAfterCreation();
+    }
+
+    return $xactions;
   }
 
 }

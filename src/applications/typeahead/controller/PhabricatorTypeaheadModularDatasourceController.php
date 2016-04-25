@@ -107,6 +107,8 @@ final class PhabricatorTypeaheadModularDatasourceController
           if (($offset + (2 * $limit)) < $hard_limit) {
             $next_uri = id(new PhutilURI($request->getRequestURI()))
               ->setQueryParam('offset', $offset + $limit)
+              ->setQueryParam('q', $query)
+              ->setQueryParam('raw', $raw_query)
               ->setQueryParam('format', 'html');
 
             $next_link = javelin_tag(
@@ -307,6 +309,7 @@ final class PhabricatorTypeaheadModularDatasourceController
 
     $form_box = id(new PHUIObjectBoxView())
       ->setHeaderText(pht('Token Query'))
+      ->setBackground(PHUIObjectBoxView::BLUE_PROPERTY)
       ->setForm($form);
 
     $table = new AphrontTableView($content);
@@ -327,17 +330,24 @@ final class PhabricatorTypeaheadModularDatasourceController
 
     $result_box = id(new PHUIObjectBoxView())
       ->setHeaderText(pht('Token Results (%s)', $class))
+      ->setBackground(PHUIObjectBoxView::BLUE_PROPERTY)
       ->appendChild($table);
 
-    return $this->buildApplicationPage(
-      array(
+    $title = pht('Typeahead Results');
+
+    $header = id(new PHUIHeaderView())
+      ->setHeader($title);
+
+    $view = id(new PHUITwoColumnView())
+      ->setHeader($header)
+      ->setFooter(array(
         $form_box,
         $result_box,
-      ),
-      array(
-        'title' => pht('Typeahead Results'),
-        'device' => false,
       ));
+
+    return $this->newPage()
+      ->setTitle($title)
+      ->appendChild($view);
   }
 
 }

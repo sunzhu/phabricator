@@ -55,8 +55,10 @@ final class PhabricatorDiffusionApplication extends PhabricatorApplication {
         => 'DiffusionCommitController',
 
       '/diffusion/' => array(
-        '(?:query/(?P<queryKey>[^/]+)/)?'
+        $this->getQueryRoutePattern()
           => 'DiffusionRepositoryListController',
+        $this->getEditRoutePattern('editpro/') =>
+          'DiffusionRepositoryEditproController',
         'new/' => 'DiffusionRepositoryNewController',
         '(?P<edit>create)/' => 'DiffusionRepositoryCreateController',
         '(?P<edit>import)/' => 'DiffusionRepositoryCreateController',
@@ -64,7 +66,11 @@ final class PhabricatorDiffusionApplication extends PhabricatorApplication {
           '(?:query/(?P<queryKey>[^/]+)/)?' => 'DiffusionPushLogListController',
           'view/(?P<id>\d+)/' => 'DiffusionPushEventViewController',
         ),
-        '(?P<repositoryCallsign>[A-Z]+)/' => array(
+        '(?:'.
+          '(?P<repositoryCallsign>[A-Z]+)'.
+          '|'.
+          '(?P<repositoryID>[1-9]\d*)'.
+        ')/' => array(
           '' => 'DiffusionRepositoryController',
 
           'repository/(?P<dblob>.*)'    => 'DiffusionRepositoryController',
@@ -83,6 +89,8 @@ final class PhabricatorDiffusionApplication extends PhabricatorApplication {
             => 'DiffusionCommitTagsController',
           'commit/(?P<commit>[a-z0-9]+)/edit/'
             => 'DiffusionCommitEditController',
+          'manage/(?:(?P<panel>[^/]+)/)?'
+            => 'DiffusionRepositoryManageController',
           'edit/' => array(
             '' => 'DiffusionRepositoryEditMainController',
             'basic/' => 'DiffusionRepositoryEditBasicController',
@@ -115,8 +123,9 @@ final class PhabricatorDiffusionApplication extends PhabricatorApplication {
         // catch-all for serving repositories over HTTP. We must accept
         // requests without the trailing "/" because SVN commands don't
         // necessarily include it.
-        '(?P<repositoryCallsign>[A-Z]+)(?:/.*)?' =>
-          'DiffusionRepositoryDefaultController',
+        '(?:(?P<repositoryCallsign>[A-Z]+)|(?P<repositoryID>[1-9]\d*))'.
+          '(?:/.*)?'
+          => 'DiffusionRepositoryDefaultController',
 
         'inline/' => array(
           'edit/(?P<phid>[^/]+)/' => 'DiffusionInlineCommentController',

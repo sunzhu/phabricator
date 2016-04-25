@@ -258,11 +258,7 @@ final class LegalpadDocumentSignController extends LegalpadController {
 
     $preamble_box = null;
     if (strlen($document->getPreamble())) {
-      $preamble_text = PhabricatorMarkupEngine::renderOneObject(
-        id(new PhabricatorMarkupOneOff())->setContent(
-          $document->getPreamble()),
-        'default',
-        $viewer);
+      $preamble_text = new PHUIRemarkupView($viewer, $document->getPreamble());
 
       // NOTE: We're avoiding `setObject()` here so we don't pick up extra UI
       // elements like "Subscribers". This information is available on the
@@ -305,12 +301,15 @@ final class LegalpadDocumentSignController extends LegalpadController {
         case LegalpadDocument::SIGNATURE_TYPE_INDIVIDUAL:
         case LegalpadDocument::SIGNATURE_TYPE_CORPORATION:
           $box = id(new PHUIObjectBoxView())
+            ->addClass('document-sign-box')
             ->setHeaderText(pht('Agree and Sign Document'))
+            ->setBackground(PHUIObjectBoxView::BLUE_PROPERTY)
             ->setForm($signature_form);
           if ($error_view) {
             $box->setInfoView($error_view);
           }
-          $signature_box = phutil_tag_div('phui-document-view-pro-box', $box);
+          $signature_box = phutil_tag_div(
+            'phui-document-view-pro-box plt', $box);
           break;
       }
 
@@ -321,15 +320,13 @@ final class LegalpadDocumentSignController extends LegalpadController {
     $crumbs->setBorder(true);
     $crumbs->addTextCrumb($document->getMonogram());
 
-    return $this->buildApplicationPage(
-      array(
-        $crumbs,
+    return $this->newPage()
+      ->setTitle($title)
+      ->setCrumbs($crumbs)
+      ->setPageObjectPHIDs(array($document->getPHID()))
+      ->appendChild(array(
         $content,
         $signature_box,
-      ),
-      array(
-        'title' => $title,
-        'pageObjects' => array($document->getPHID()),
       ));
   }
 

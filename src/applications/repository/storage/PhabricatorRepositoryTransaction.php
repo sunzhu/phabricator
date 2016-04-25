@@ -4,24 +4,17 @@ final class PhabricatorRepositoryTransaction
   extends PhabricatorApplicationTransaction {
 
   const TYPE_VCS = 'repo:vcs';
-  const TYPE_ACTIVATE     = 'repo:activate';
-  const TYPE_NAME         = 'repo:name';
-  const TYPE_DESCRIPTION  = 'repo:description';
-  const TYPE_ENCODING     = 'repo:encoding';
+  const TYPE_ACTIVATE = 'repo:activate';
+  const TYPE_NAME = 'repo:name';
+  const TYPE_DESCRIPTION = 'repo:description';
+  const TYPE_ENCODING = 'repo:encoding';
   const TYPE_DEFAULT_BRANCH = 'repo:default-branch';
   const TYPE_TRACK_ONLY = 'repo:track-only';
   const TYPE_AUTOCLOSE_ONLY = 'repo:autoclose-only';
   const TYPE_SVN_SUBPATH = 'repo:svn-subpath';
-  const TYPE_UUID = 'repo:uuid';
   const TYPE_NOTIFY = 'repo:notify';
   const TYPE_AUTOCLOSE = 'repo:autoclose';
-  const TYPE_REMOTE_URI = 'repo:remote-uri';
-  const TYPE_LOCAL_PATH = 'repo:local-path';
-  const TYPE_HOSTING = 'repo:hosting';
-  const TYPE_PROTOCOL_HTTP = 'repo:serve-http';
-  const TYPE_PROTOCOL_SSH = 'repo:serve-ssh';
   const TYPE_PUSH_POLICY = 'repo:push-policy';
-  const TYPE_CREDENTIAL = 'repo:credential';
   const TYPE_DANGEROUS = 'repo:dangerous';
   const TYPE_SLUG = 'repo:slug';
   const TYPE_SERVICE = 'repo:service';
@@ -29,6 +22,7 @@ final class PhabricatorRepositoryTransaction
   const TYPE_SYMBOLS_LANGUAGE = 'repo:symbol-language';
   const TYPE_STAGING_URI = 'repo:staging-uri';
   const TYPE_AUTOMATION_BLUEPRINTS = 'repo:automation-blueprints';
+  const TYPE_CALLSIGN = 'repo:callsign';
 
   // TODO: Clean up these legacy transaction types.
   const TYPE_SSH_LOGIN = 'repo:ssh-login';
@@ -36,6 +30,13 @@ final class PhabricatorRepositoryTransaction
   const TYPE_SSH_KEYFILE = 'repo:ssh-keyfile';
   const TYPE_HTTP_LOGIN = 'repo:http-login';
   const TYPE_HTTP_PASS = 'repo:http-pass';
+  const TYPE_CREDENTIAL = 'repo:credential';
+  const TYPE_PROTOCOL_HTTP = 'repo:serve-http';
+  const TYPE_PROTOCOL_SSH = 'repo:serve-ssh';
+  const TYPE_HOSTING = 'repo:hosting';
+  const TYPE_LOCAL_PATH = 'repo:local-path';
+  const TYPE_REMOTE_URI = 'repo:remote-uri';
+  const TYPE_UUID = 'repo:uuid';
 
   public function getApplicationName() {
     return 'repository';
@@ -133,7 +134,13 @@ final class PhabricatorRepositoryTransaction
           '%s created this repository.',
           $this->renderHandleLink($author_phid));
       case self::TYPE_ACTIVATE:
-        if ($new) {
+        // TODO: Old versions of this transaction use a boolean value, but
+        // should be migrated.
+        $is_deactivate =
+          (!$new) ||
+          ($new == PhabricatorRepository::STATUS_INACTIVE);
+
+        if (!$is_deactivate) {
           return pht(
             '%s activated this repository.',
             $this->renderHandleLink($author_phid));
@@ -466,6 +473,26 @@ final class PhabricatorRepositoryTransaction
             new PhutilNumber(count($rem)),
             $this->renderHandleList($rem));
         }
+
+      case self::TYPE_CALLSIGN:
+        if ($old === null) {
+          return pht(
+            '%s set the callsign for this repository to "%s".',
+            $this->renderHandleLink($author_phid),
+            $new);
+        } else if ($new === null) {
+          return pht(
+            '%s removed the callsign ("%s") for this repository.',
+            $this->renderHandleLink($author_phid),
+            $old);
+        } else {
+          return pht(
+            '%s changed the callsign for this repository from "%s" to "%s".',
+            $this->renderHandleLink($author_phid),
+            $old,
+            $new);
+        }
+
     }
 
     return parent::getTitle();

@@ -83,6 +83,26 @@ final class PhabricatorStartup {
    * @task info
    */
   public static function getRawInput() {
+    if (self::$rawInput === null) {
+      $stream = new AphrontRequestStream();
+
+      if (isset($_SERVER['HTTP_CONTENT_ENCODING'])) {
+        $encoding = trim($_SERVER['HTTP_CONTENT_ENCODING']);
+        $stream->setEncoding($encoding);
+      }
+
+      $input = '';
+      do {
+        $bytes = $stream->readData();
+        if ($bytes === null) {
+          break;
+        }
+        $input .= $bytes;
+      } while (true);
+
+      self::$rawInput = $input;
+    }
+
     return self::$rawInput;
   }
 
@@ -128,20 +148,6 @@ final class PhabricatorStartup {
     self::detectPostMaxSizeTriggered();
 
     self::beginOutputCapture();
-
-    if (isset($_SERVER['HTTP_CONTENT_ENCODING'])) {
-      $encoding = trim($_SERVER['HTTP_CONTENT_ENCODING']);
-    } else {
-      $encoding = null;
-    }
-
-    if ($encoding === 'gzip') {
-      $source_stream = 'compress.zlib://php://input';
-    } else {
-      $source_stream = 'php://input';
-    }
-
-    self::$rawInput = (string)file_get_contents($source_stream);
   }
 
 

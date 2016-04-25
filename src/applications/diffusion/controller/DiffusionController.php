@@ -64,6 +64,20 @@ abstract class DiffusionController extends PhabricatorController {
       return new Aphront404Response();
     }
 
+    // If the client is making a request like "/diffusion/1/...", but the
+    // repository has a different canonical path like "/diffusion/XYZ/...",
+    // redirect them to the canonical path.
+
+    $request_path = $request->getPath();
+    $repository = $drequest->getRepository();
+
+    $canonical_path = $repository->getCanonicalPath($request_path);
+    if ($canonical_path !== null) {
+      if ($canonical_path != $request_path) {
+        return id(new AphrontRedirectResponse())->setURI($canonical_path);
+      }
+    }
+
     $this->diffusionRequest = $drequest;
 
     return null;
@@ -277,6 +291,7 @@ abstract class DiffusionController extends PhabricatorController {
     return id(new PHUIInfoView())
       ->setSeverity(PHUIInfoView::SEVERITY_WARNING)
       ->setTitle($title)
+      ->setFlush(true)
       ->appendChild($body);
   }
 
@@ -284,6 +299,27 @@ abstract class DiffusionController extends PhabricatorController {
     return id(new PHUIBoxView())
       ->addMargin(PHUI::MARGIN_LARGE)
       ->appendChild($pager);
+  }
+
+  protected function renderCommitHashTag(DiffusionRequest $drequest) {
+    $stable_commit = $drequest->getStableCommit();
+    $commit = phutil_tag(
+        'a',
+        array(
+          'href' => $drequest->generateURI(
+            array(
+              'action' => 'commit',
+              'commit' => $stable_commit,
+            )),
+        ),
+      $drequest->getRepository()->formatCommitName($stable_commit, true));
+
+    $tag = id(new PHUITagView())
+      ->setName($commit)
+      ->setShade('indigo')
+      ->setType(PHUITagView::TYPE_SHADE);
+
+    return $tag;
   }
 
   protected function renderDirectoryReadme(DiffusionBrowseResultSet $browse) {

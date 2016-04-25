@@ -43,7 +43,7 @@ final class PhabricatorProjectSubprojectsController
         ->withParentProjectPHIDs(array($project->getPHID()))
         ->needImages(true)
         ->withIsMilestone(true)
-        ->setOrder('newest')
+        ->setOrderVector(array('milestoneNumber', 'id'))
         ->execute();
     } else {
       $milestones = array();
@@ -52,6 +52,7 @@ final class PhabricatorProjectSubprojectsController
     if ($milestones) {
       $milestone_list = id(new PHUIObjectBoxView())
         ->setHeaderText(pht('Milestones'))
+        ->setBackground(PHUIObjectBoxView::BLUE_PROPERTY)
         ->setObjectList(
           id(new PhabricatorProjectListView())
             ->setUser($viewer)
@@ -64,6 +65,7 @@ final class PhabricatorProjectSubprojectsController
     if ($subprojects) {
       $subproject_list = id(new PHUIObjectBoxView())
         ->setHeaderText(pht('Subprojects'))
+        ->setBackground(PHUIObjectBoxView::BLUE_PROPERTY)
         ->setObjectList(
           id(new PhabricatorProjectListView())
             ->setUser($viewer)
@@ -78,15 +80,15 @@ final class PhabricatorProjectSubprojectsController
       $milestones,
       $subprojects);
 
-    $action_list = $this->buildActionList(
+    $curtain = $this->buildCurtainView(
       $project,
       $milestones,
       $subprojects);
 
-    $property_list->setActionList($action_list);
 
-    $header_box = id(new PHUIObjectBoxView())
-      ->setHeaderText(pht('Subprojects and Milestones'))
+    $details = id(new PHUIObjectBoxView())
+      ->setHeaderText(pht('Details'))
+      ->setBackground(PHUIObjectBoxView::BLUE_PROPERTY)
       ->addPropertyList($property_list);
 
     $nav = $this->getProfileMenu();
@@ -94,17 +96,26 @@ final class PhabricatorProjectSubprojectsController
 
     $crumbs = $this->buildApplicationCrumbs();
     $crumbs->addTextCrumb(pht('Subprojects'));
+    $crumbs->setBorder(true);
+
+    $header = id(new PHUIHeaderView())
+      ->setHeader(pht('Subprojects and Milestones'))
+      ->setHeaderIcon('fa-sitemap');
+
+    $view = id(new PHUITwoColumnView())
+      ->setHeader($header)
+      ->setCurtain($curtain)
+      ->setMainColumn(array(
+          $details,
+          $milestone_list,
+          $subproject_list,
+      ));
 
     return $this->newPage()
       ->setNavigation($nav)
       ->setCrumbs($crumbs)
       ->setTitle(array($project->getName(), pht('Subprojects')))
-      ->appendChild(
-        array(
-          $header_box,
-          $milestone_list,
-          $subproject_list,
-        ));
+      ->appendChild($view);
   }
 
   private function buildPropertyList(
@@ -174,12 +185,15 @@ final class PhabricatorProjectSubprojectsController
     return $view;
   }
 
-  private function buildActionList(
+  private function buildCurtainView(
     PhabricatorProject $project,
     array $milestones,
     array $subprojects) {
     $viewer = $this->getViewer();
     $id = $project->getID();
+
+    $can_create = $this->hasApplicationCapability(
+      ProjectCreateProjectsCapability::CAPABILITY);
 
     $can_edit = PhabricatorPolicyFilter::hasCapability(
       $viewer,
@@ -189,8 +203,7 @@ final class PhabricatorProjectSubprojectsController
     $allows_milestones = $project->supportsMilestones();
     $allows_subprojects = $project->supportsSubprojects();
 
-    $view = id(new PhabricatorActionListView())
-      ->setUser($viewer);
+    $curtain = $this->newCurtainView($project);
 
     if ($allows_milestones && $milestones) {
       $milestone_text = pht('Create Next Milestone');
@@ -198,10 +211,10 @@ final class PhabricatorProjectSubprojectsController
       $milestone_text = pht('Create Milestone');
     }
 
-    $can_milestone = ($can_edit && $allows_milestones);
+    $can_milestone = ($can_create && $can_edit && $allows_milestones);
     $milestone_href = "/project/edit/?milestone={$id}";
 
-    $view->addAction(
+    $curtain->addAction(
       id(new PhabricatorActionView())
         ->setName($milestone_text)
         ->setIcon('fa-plus')
@@ -209,7 +222,7 @@ final class PhabricatorProjectSubprojectsController
         ->setDisabled(!$can_milestone)
         ->setWorkflow(!$can_milestone));
 
-    $can_subproject = ($can_edit && $allows_subprojects);
+    $can_subproject = ($can_create && $can_edit && $allows_subprojects);
 
     // If we're offering to create the first subproject, we're going to warn
     // the user about the effects before moving forward.
@@ -223,7 +236,7 @@ final class PhabricatorProjectSubprojectsController
       $subproject_workflow = !$can_subproject;
     }
 
-    $view->addAction(
+    $curtain->addAction(
       id(new PhabricatorActionView())
         ->setName(pht('Create Subproject'))
         ->setIcon('fa-plus')
@@ -231,7 +244,7 @@ final class PhabricatorProjectSubprojectsController
         ->setDisabled($subproject_disabled)
         ->setWorkflow($subproject_workflow));
 
-    return $view;
+    return $curtain;
   }
 
   private function renderStatus($icon, $target, $note) {

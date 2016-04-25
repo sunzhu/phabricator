@@ -38,16 +38,16 @@ final class DiffusionRepositoryEditMainController
     $title = pht('Edit %s', $repository->getName());
 
     $header = id(new PHUIHeaderView())
-      ->setHeader($title);
+      ->setHeader($title)
+      ->setHeaderIcon('fa-pencil');
     if ($repository->isTracked()) {
       $header->setStatus('fa-check', 'bluegrey', pht('Active'));
     } else {
       $header->setStatus('fa-ban', 'dark', pht('Inactive'));
     }
 
-    $basic_actions = $this->buildBasicActions($repository);
-    $basic_properties =
-      $this->buildBasicProperties($repository, $basic_actions);
+    $curtain = $this->buildCurtain($repository);
+    $basic_properties = $this->buildBasicProperties($repository);
 
     $policy_actions = $this->buildPolicyActions($repository);
     $policy_properties =
@@ -120,15 +120,13 @@ final class DiffusionRepositoryEditMainController
     $boxes = array();
 
     $boxes[] = id(new PHUIObjectBoxView())
-      ->setHeader($header)
-      ->addPropertyList($basic_properties);
-
-    $boxes[] = id(new PHUIObjectBoxView())
       ->setHeaderText(pht('Policies'))
+      ->setBackground(PHUIObjectBoxView::BLUE_PROPERTY)
       ->addPropertyList($policy_properties);
 
     $boxes[] = id(new PHUIObjectBoxView())
       ->setHeaderText(pht('Hosting'))
+      ->setBackground(PHUIObjectBoxView::BLUE_PROPERTY)
       ->addPropertyList($hosting_properties);
 
     if ($repository->canMirror()) {
@@ -156,6 +154,7 @@ final class DiffusionRepositoryEditMainController
       $boxes[] = id(new PHUIObjectBoxView())
         ->setFormErrors($mirror_info)
         ->setHeaderText(pht('Mirrors'))
+        ->setBackground(PHUIObjectBoxView::BLUE_PROPERTY)
         ->addPropertyList($mirror_properties);
 
       $boxes[] = $mirror_list;
@@ -164,73 +163,88 @@ final class DiffusionRepositoryEditMainController
     if ($remote_properties) {
       $boxes[] = id(new PHUIObjectBoxView())
         ->setHeaderText(pht('Remote'))
+        ->setBackground(PHUIObjectBoxView::BLUE_PROPERTY)
         ->addPropertyList($remote_properties);
     }
 
     if ($storage_properties) {
       $boxes[] = id(new PHUIObjectBoxView())
         ->setHeaderText(pht('Storage'))
+        ->setBackground(PHUIObjectBoxView::BLUE_PROPERTY)
         ->addPropertyList($storage_properties);
     }
 
     if ($staging_properties) {
       $boxes[] = id(new PHUIObjectBoxView())
         ->setHeaderText(pht('Staging'))
+        ->setBackground(PHUIObjectBoxView::BLUE_PROPERTY)
         ->addPropertyList($staging_properties);
     }
 
     if ($automation_properties) {
       $boxes[] = id(new PHUIObjectBoxView())
         ->setHeaderText(pht('Automation'))
+        ->setBackground(PHUIObjectBoxView::BLUE_PROPERTY)
         ->addPropertyList($automation_properties);
     }
 
     $boxes[] = id(new PHUIObjectBoxView())
       ->setHeaderText(pht('Text Encoding'))
+      ->setBackground(PHUIObjectBoxView::BLUE_PROPERTY)
       ->addPropertyList($encoding_properties);
 
     $boxes[] = id(new PHUIObjectBoxView())
       ->setHeaderText(pht('Symbols'))
+      ->setBackground(PHUIObjectBoxView::BLUE_PROPERTY)
       ->addPropertyList($symbols_properties);
 
     if ($branches_properties) {
       $boxes[] = id(new PHUIObjectBoxView())
         ->setHeaderText(pht('Branches'))
+        ->setBackground(PHUIObjectBoxView::BLUE_PROPERTY)
         ->addPropertyList($branches_properties);
     }
 
     if ($subversion_properties) {
       $boxes[] = id(new PHUIObjectBoxView())
         ->setHeaderText(pht('Subversion'))
+        ->setBackground(PHUIObjectBoxView::BLUE_PROPERTY)
         ->addPropertyList($subversion_properties);
     }
 
     $boxes[] = id(new PHUIObjectBoxView())
       ->setHeaderText(pht('Actions'))
+      ->setBackground(PHUIObjectBoxView::BLUE_PROPERTY)
       ->addPropertyList($actions_properties);
 
-    return $this->buildApplicationPage(
-      array(
-        $crumbs,
+    $crumbs->setBorder(true);
+
+    $view = id(new PHUITwoColumnView())
+      ->setHeader($header)
+      ->setCurtain($curtain)
+      ->addPropertySection(pht('Properties'), $basic_properties)
+      ->setMainColumn(array(
         $boxes,
         $timeline,
-      ),
-      array(
-        'title' => $title,
       ));
+
+    return $this->newPage()
+      ->setTitle($title)
+      ->setCrumbs($crumbs)
+      ->appendChild($view);
+
   }
 
-  private function buildBasicActions(PhabricatorRepository $repository) {
-    $viewer = $this->getRequest()->getUser();
+  private function buildCurtain(PhabricatorRepository $repository) {
+    $viewer = $this->getViewer();
 
-    $view = id(new PhabricatorActionListView())
-      ->setUser($viewer);
+    $curtain = $this->newCurtainView($repository);
 
     $edit = id(new PhabricatorActionView())
       ->setIcon('fa-pencil')
       ->setName(pht('Edit Basic Information'))
       ->setHref($this->getRepositoryControllerURI($repository, 'edit/basic/'));
-    $view->addAction($edit);
+    $curtain->addAction($edit);
 
     $edit = id(new PhabricatorActionView())
       ->setIcon('fa-refresh')
@@ -238,7 +252,7 @@ final class DiffusionRepositoryEditMainController
       ->setWorkflow(true)
       ->setHref(
         $this->getRepositoryControllerURI($repository, 'edit/update/'));
-    $view->addAction($edit);
+    $curtain->addAction($edit);
 
     $activate = id(new PhabricatorActionView())
       ->setHref(
@@ -255,9 +269,9 @@ final class DiffusionRepositoryEditMainController
         ->setName(pht('Activate Repository'));
     }
 
-    $view->addAction($activate);
+    $curtain->addAction($activate);
 
-    $view->addAction(
+    $curtain->addAction(
       id(new PhabricatorActionView())
         ->setName(pht('Delete Repository'))
         ->setIcon('fa-times')
@@ -266,25 +280,27 @@ final class DiffusionRepositoryEditMainController
         ->setDisabled(true)
         ->setWorkflow(true));
 
-    return $view;
+    return $curtain;
   }
 
   private function buildBasicProperties(
-    PhabricatorRepository $repository,
-    PhabricatorActionListView $actions) {
+    PhabricatorRepository $repository) {
 
-    $viewer = $this->getRequest()->getUser();
+    $viewer = $this->getViewer();
 
     $view = id(new PHUIPropertyListView())
-      ->setUser($viewer)
-      ->setObject($repository)
-      ->setActionList($actions);
+      ->setUser($viewer);
 
     $type = PhabricatorRepositoryType::getNameForRepositoryType(
       $repository->getVersionControlSystem());
 
     $view->addProperty(pht('Type'), $type);
-    $view->addProperty(pht('Callsign'), $repository->getCallsign());
+
+    $callsign = $repository->getCallsign();
+    if (!strlen($callsign)) {
+      $callsign = phutil_tag('em', array(), pht('No Callsign'));
+    }
+    $view->addProperty(pht('Callsign'), $callsign);
 
     $short_name = $repository->getRepositorySlug();
     if ($short_name === null) {
@@ -309,10 +325,7 @@ final class DiffusionRepositoryEditMainController
     if (!strlen($description)) {
       $description = phutil_tag('em', array(), pht('No description provided.'));
     } else {
-      $description = PhabricatorMarkupEngine::renderOneObject(
-        $repository,
-        'description',
-        $viewer);
+      $description = new PHUIRemarkupView($viewer, $description);
     }
     $view->addTextContent($description);
 
@@ -320,7 +333,7 @@ final class DiffusionRepositoryEditMainController
   }
 
   private function buildEncodingActions(PhabricatorRepository $repository) {
-    $viewer = $this->getRequest()->getUser();
+    $viewer = $this->getViewer();
 
     $view = id(new PhabricatorActionListView())
       ->setUser($viewer);
@@ -339,7 +352,7 @@ final class DiffusionRepositoryEditMainController
     PhabricatorRepository $repository,
     PhabricatorActionListView $actions) {
 
-    $viewer = $this->getRequest()->getUser();
+    $viewer = $this->getViewer();
 
     $view = id(new PHUIPropertyListView())
       ->setUser($viewer)
@@ -356,7 +369,7 @@ final class DiffusionRepositoryEditMainController
   }
 
   private function buildPolicyActions(PhabricatorRepository $repository) {
-    $viewer = $this->getRequest()->getUser();
+    $viewer = $this->getViewer();
 
     $view = id(new PhabricatorActionListView())
       ->setUser($viewer);
@@ -375,7 +388,7 @@ final class DiffusionRepositoryEditMainController
     PhabricatorRepository $repository,
     PhabricatorActionListView $actions) {
 
-    $viewer = $this->getRequest()->getUser();
+    $viewer = $this->getViewer();
 
     $view = id(new PHUIPropertyListView())
       ->setUser($viewer)
@@ -410,7 +423,7 @@ final class DiffusionRepositoryEditMainController
   }
 
   private function buildBranchesActions(PhabricatorRepository $repository) {
-    $viewer = $this->getRequest()->getUser();
+    $viewer = $this->getViewer();
 
     $view = id(new PhabricatorActionListView())
       ->setUser($viewer);
@@ -429,7 +442,7 @@ final class DiffusionRepositoryEditMainController
     PhabricatorRepository $repository,
     PhabricatorActionListView $actions) {
 
-    $viewer = $this->getRequest()->getUser();
+    $viewer = $this->getViewer();
 
     $view = id(new PHUIPropertyListView())
       ->setUser($viewer)
@@ -459,7 +472,7 @@ final class DiffusionRepositoryEditMainController
   }
 
   private function buildSubversionActions(PhabricatorRepository $repository) {
-    $viewer = $this->getRequest()->getUser();
+    $viewer = $this->getViewer();
 
     $view = id(new PhabricatorActionListView())
       ->setUser($viewer);
@@ -478,7 +491,7 @@ final class DiffusionRepositoryEditMainController
     PhabricatorRepository $repository,
     PhabricatorActionListView $actions) {
 
-    $viewer = $this->getRequest()->getUser();
+    $viewer = $this->getViewer();
 
     $view = id(new PHUIPropertyListView())
       ->setUser($viewer)
@@ -498,7 +511,7 @@ final class DiffusionRepositoryEditMainController
   }
 
   private function buildActionsActions(PhabricatorRepository $repository) {
-    $viewer = $this->getRequest()->getUser();
+    $viewer = $this->getViewer();
 
     $view = id(new PhabricatorActionListView())
       ->setUser($viewer);
@@ -517,7 +530,7 @@ final class DiffusionRepositoryEditMainController
     PhabricatorRepository $repository,
     PhabricatorActionListView $actions) {
 
-    $viewer = $this->getRequest()->getUser();
+    $viewer = $this->getViewer();
 
     $view = id(new PHUIPropertyListView())
       ->setUser($viewer)
@@ -539,7 +552,7 @@ final class DiffusionRepositoryEditMainController
   }
 
   private function buildRemoteActions(PhabricatorRepository $repository) {
-    $viewer = $this->getRequest()->getUser();
+    $viewer = $this->getViewer();
 
     $view = id(new PhabricatorActionListView())
       ->setUser($viewer);
@@ -558,7 +571,7 @@ final class DiffusionRepositoryEditMainController
     PhabricatorRepository $repository,
     PhabricatorActionListView $actions) {
 
-    $viewer = $this->getRequest()->getUser();
+    $viewer = $this->getViewer();
 
     $view = id(new PHUIPropertyListView())
       ->setUser($viewer)
@@ -579,7 +592,7 @@ final class DiffusionRepositoryEditMainController
   }
 
   private function buildStorageActions(PhabricatorRepository $repository) {
-    $viewer = $this->getRequest()->getUser();
+    $viewer = $this->getViewer();
 
     $view = id(new PhabricatorActionListView())
       ->setUser($viewer);
@@ -598,7 +611,7 @@ final class DiffusionRepositoryEditMainController
     PhabricatorRepository $repository,
     PhabricatorActionListView $actions) {
 
-    $viewer = $this->getRequest()->getUser();
+    $viewer = $this->getViewer();
 
     $view = id(new PHUIPropertyListView())
       ->setUser($viewer)
@@ -799,7 +812,7 @@ final class DiffusionRepositoryEditMainController
   private function buildRepositoryStatus(
     PhabricatorRepository $repository) {
 
-    $viewer = $this->getRequest()->getUser();
+    $viewer = $this->getViewer();
     $is_cluster = $repository->getAlmanacServicePHID();
 
     $view = new PHUIStatusListView();
@@ -1186,7 +1199,7 @@ final class DiffusionRepositoryEditMainController
   private function buildMirrorActions(
     PhabricatorRepository $repository) {
 
-    $viewer = $this->getRequest()->getUser();
+    $viewer = $this->getViewer();
 
     $mirror_actions = id(new PhabricatorActionListView())
       ->setUser($viewer);
@@ -1209,7 +1222,7 @@ final class DiffusionRepositoryEditMainController
     PhabricatorRepository $repository,
     PhabricatorActionListView $actions) {
 
-    $viewer = $this->getRequest()->getUser();
+    $viewer = $this->getViewer();
 
     $mirror_properties = id(new PHUIPropertyListView())
       ->setUser($viewer)
@@ -1260,11 +1273,14 @@ final class DiffusionRepositoryEditMainController
       $mirror_list->addItem($item);
     }
 
-    return $mirror_list;
+    return id(new PHUIObjectBoxView())
+      ->setHeaderText(pht('Configured Mirrors'))
+      ->setBackground(PHUIObjectBoxView::BLUE_PROPERTY)
+      ->setObjectList($mirror_list);
   }
 
   private function buildSymbolsActions(PhabricatorRepository $repository) {
-    $viewer = $this->getRequest()->getUser();
+    $viewer = $this->getViewer();
 
     $view = id(new PhabricatorActionListView())
       ->setUser($viewer);
@@ -1283,7 +1299,7 @@ final class DiffusionRepositoryEditMainController
     PhabricatorRepository $repository,
     PhabricatorActionListView $actions) {
 
-    $viewer = $this->getRequest()->getUser();
+    $viewer = $this->getViewer();
 
     $view = id(new PHUIPropertyListView())
       ->setUser($viewer)

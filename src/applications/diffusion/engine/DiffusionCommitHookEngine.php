@@ -10,6 +10,7 @@
  */
 final class DiffusionCommitHookEngine extends Phobject {
 
+  const ENV_REPOSITORY = 'PHABRICATOR_REPOSITORY';
   const ENV_USER = 'PHABRICATOR_USER';
   const ENV_REMOTE_ADDRESS = 'PHABRICATOR_REMOTE_ADDRESS';
   const ENV_REMOTE_PROTOCOL = 'PHABRICATOR_REMOTE_PROTOCOL';
@@ -610,7 +611,7 @@ final class DiffusionCommitHookEngine extends Phobject {
     $console = PhutilConsole::getConsole();
 
     $env = array(
-      'PHABRICATOR_REPOSITORY' => $this->getRepository()->getCallsign(),
+      self::ENV_REPOSITORY => $this->getRepository()->getPHID(),
       self::ENV_USER => $this->getViewer()->getUsername(),
       self::ENV_REMOTE_PROTOCOL => $this->getRemoteProtocol(),
       self::ENV_REMOTE_ADDRESS => $this->getRemoteAddress(),
@@ -769,10 +770,10 @@ final class DiffusionCommitHookEngine extends Phobject {
       }
 
       $stray_heads = array();
+      $head_map = array();
 
       if ($old_heads && !$new_heads) {
         // This is a branch deletion with "--close-branch".
-        $head_map = array();
         foreach ($old_heads as $old_head) {
           $head_map[$old_head] = array(self::EMPTY_HASH);
         }
@@ -797,7 +798,6 @@ final class DiffusionCommitHookEngine extends Phobject {
             '{node}\1');
         }
 
-        $head_map = array();
         foreach (new FutureIterator($dfutures) as $future_head => $dfuture) {
           list($stdout) = $dfuture->resolvex();
           $descendant_heads = array_filter(explode("\1", $stdout));
@@ -1058,8 +1058,16 @@ final class DiffusionCommitHookEngine extends Phobject {
     // up.
     $phid = id(new PhabricatorRepositoryPushLog())->generatePHID();
 
+    $device = AlmanacKeys::getLiveDevice();
+    if ($device) {
+      $device_phid = $device->getPHID();
+    } else {
+      $device_phid = null;
+    }
+
     return PhabricatorRepositoryPushLog::initializeNewLog($this->getViewer())
       ->setPHID($phid)
+      ->setDevicePHID($device_phid)
       ->setRepositoryPHID($this->getRepository()->getPHID())
       ->attachRepository($this->getRepository())
       ->setEpoch(time());
