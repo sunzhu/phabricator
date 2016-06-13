@@ -508,7 +508,7 @@ final class PhabricatorRepository extends PhabricatorRepositoryDAO
     return DiffusionCommandEngine::newCommandEngine($this)
       ->setArgv($argv)
       ->setCredentialPHID($this->getCredentialPHID())
-      ->setProtocol($this->getRemoteProtocol());
+      ->setURI($this->getRemoteURIObject());
   }
 
 /* -(  Local Command Execution  )-------------------------------------------- */
@@ -2061,7 +2061,10 @@ final class PhabricatorRepository extends PhabricatorRepositoryDAO
       $clone[] = $uri;
     }
 
-    return msort($clone, 'getURIScore');
+    $clone = msort($clone, 'getURIScore');
+    $clone = array_reverse($clone);
+
+    return $clone;
   }
 
 
