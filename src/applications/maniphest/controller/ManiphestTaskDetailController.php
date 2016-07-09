@@ -31,8 +31,6 @@ final class ManiphestTaskDetailController extends ManiphestController {
       ->setTargetObject($task);
 
     $e_commit = ManiphestTaskHasCommitEdgeType::EDGECONST;
-    $e_dep_on = ManiphestTaskDependsOnTaskEdgeType::EDGECONST;
-    $e_dep_by = ManiphestTaskDependedOnByTaskEdgeType::EDGECONST;
     $e_rev    = ManiphestTaskHasRevisionEdgeType::EDGECONST;
     $e_mock   = ManiphestTaskHasMockEdgeType::EDGECONST;
 
@@ -43,8 +41,6 @@ final class ManiphestTaskDetailController extends ManiphestController {
       ->withEdgeTypes(
         array(
           $e_commit,
-          $e_dep_on,
-          $e_dep_by,
           $e_rev,
           $e_mock,
         ));
@@ -90,6 +86,15 @@ final class ManiphestTaskDetailController extends ManiphestController {
       ))
       ->addPropertySection(pht('Description'), $description)
       ->addPropertySection(pht('Details'), $details);
+
+    $task_graph = id(new ManiphestTaskGraph())
+      ->setViewer($viewer)
+      ->setSeedPHID($task->getPHID())
+      ->loadGraph();
+    if (!$task_graph->isEmpty()) {
+      $graph_table = $task_graph->newGraphTable();
+      $view->addPropertySection(pht('Task Graph'), $graph_table);
+    }
 
     return $this->newPage()
       ->setTitle($title)
@@ -166,15 +171,6 @@ final class ManiphestTaskDetailController extends ManiphestController {
         ->setDisabled(!$can_edit)
         ->setWorkflow(!$can_edit));
 
-    $curtain->addAction(
-      id(new PhabricatorActionView())
-        ->setName(pht('Merge Duplicates In'))
-        ->setHref("/search/attach/{$phid}/TASK/merge/")
-        ->setWorkflow(true)
-        ->setIcon('fa-compress')
-        ->setDisabled(!$can_edit)
-        ->setWorkflow(true));
-
     $edit_config = $edit_engine->loadDefaultEditConfiguration();
     $can_create = (bool)$edit_config;
 
@@ -195,23 +191,35 @@ final class ManiphestTaskDetailController extends ManiphestController {
       $edit_uri = $this->getApplicationURI($edit_uri);
     }
 
-    $curtain->addAction(
-      id(new PhabricatorActionView())
-        ->setName(pht('Create Subtask'))
-        ->setHref($edit_uri)
-        ->setIcon('fa-level-down')
-        ->setDisabled(!$can_create)
-        ->setWorkflow(!$can_create));
+    $subtask_item = id(new PhabricatorActionView())
+      ->setName(pht('Create Subtask'))
+      ->setHref($edit_uri)
+      ->setIcon('fa-level-down')
+      ->setDisabled(!$can_create)
+      ->setWorkflow(!$can_create);
 
-    $curtain->addAction(
-      id(new PhabricatorActionView())
-        ->setName(pht('Edit Blocking Tasks'))
-        ->setHref("/search/attach/{$phid}/TASK/blocks/")
-        ->setWorkflow(true)
-        ->setIcon('fa-link')
-        ->setDisabled(!$can_edit)
-        ->setWorkflow(true));
+    $relationship_list = PhabricatorObjectRelationshipList::newForObject(
+      $viewer,
+      $task);
 
+    $submenu_actions = array(
+      $subtask_item,
+      ManiphestTaskHasParentRelationship::RELATIONSHIPKEY,
+      ManiphestTaskHasSubtaskRelationship::RELATIONSHIPKEY,
+      ManiphestTaskMergeInRelationship::RELATIONSHIPKEY,
+      ManiphestTaskCloseAsDuplicateRelationship::RELATIONSHIPKEY,
+    );
+
+    $task_submenu = $relationship_list->newActionSubmenu($submenu_actions)
+      ->setName(pht('Edit Related Tasks...'))
+      ->setIcon('fa-anchor');
+
+    $curtain->addAction($task_submenu);
+
+    $relationship_submenu = $relationship_list->newActionMenu();
+    if ($relationship_submenu) {
+      $curtain->addAction($relationship_submenu);
+    }
 
     $owner_phid = $task->getOwnerPHID();
     $author_phid = $task->getAuthorPHID();
@@ -276,10 +284,6 @@ final class ManiphestTaskDetailController extends ManiphestController {
     }
 
     $edge_types = array(
-      ManiphestTaskDependedOnByTaskEdgeType::EDGECONST
-        => pht('Blocks'),
-      ManiphestTaskDependsOnTaskEdgeType::EDGECONST
-        => pht('Blocked By'),
       ManiphestTaskHasRevisionEdgeType::EDGECONST
         => pht('Differential Revisions'),
       ManiphestTaskHasMockEdgeType::EDGECONST

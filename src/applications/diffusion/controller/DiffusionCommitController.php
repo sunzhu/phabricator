@@ -129,6 +129,12 @@ final class DiffusionCommitController extends DiffusionController {
           ),
           $message));
 
+      if ($commit->isUnreachable()) {
+        $this->commitErrors[] = pht(
+          'This commit has been deleted in the repository: it is no longer '.
+          'reachable from any branch, tag, or ref.');
+      }
+
       if ($this->getCommitErrors()) {
         $error_panel = id(new PHUIInfoView())
           ->appendChild($this->getCommitErrors())
@@ -962,25 +968,20 @@ final class DiffusionCommitController extends DiffusionController {
       ->setWorkflow(!$can_edit);
     $curtain->addAction($action);
 
-    require_celerity_resource('phabricator-object-selector-css');
-    require_celerity_resource('javelin-behavior-phabricator-object-selector');
-
-    $maniphest = 'PhabricatorManiphestApplication';
-    if (PhabricatorApplication::isClassInstalled($maniphest)) {
-      $action = id(new PhabricatorActionView())
-        ->setName(pht('Edit Maniphest Tasks'))
-        ->setIcon('fa-anchor')
-        ->setHref('/search/attach/'.$commit->getPHID().'/TASK/edge/')
-        ->setWorkflow(true)
-        ->setDisabled(!$can_edit);
-      $curtain->addAction($action);
-    }
-
     $action = id(new PhabricatorActionView())
       ->setName(pht('Download Raw Diff'))
       ->setHref($request->getRequestURI()->alter('diff', true))
       ->setIcon('fa-download');
     $curtain->addAction($action);
+
+    $relationship_list = PhabricatorObjectRelationshipList::newForObject(
+      $viewer,
+      $commit);
+
+    $relationship_submenu = $relationship_list->newActionMenu();
+    if ($relationship_submenu) {
+      $curtain->addAction($relationship_submenu);
+    }
 
     return $curtain;
   }

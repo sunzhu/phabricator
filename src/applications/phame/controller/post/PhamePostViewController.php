@@ -48,6 +48,16 @@ final class PhamePostViewController
                 'Use "Publish" to publish this post.')));
     }
 
+    if ($post->isArchived()) {
+      $document->appendChild(
+        id(new PHUIInfoView())
+          ->setSeverity(PHUIInfoView::SEVERITY_ERROR)
+          ->setTitle(pht('Archived Post'))
+          ->appendChild(
+            pht('Only you can see this archived post until you publish it. '.
+                'Use "Publish" to publish this post.')));
+    }
+
     if (!$post->getBlog()) {
       $document->appendChild(
         id(new PHUIInfoView())
@@ -92,6 +102,8 @@ final class PhamePostViewController
     $date = phabricator_datetime($post->getDatePublished(), $viewer);
     if ($post->isDraft()) {
       $subtitle = pht('Unpublished draft by %s.', $author);
+    } else if ($post->isArchived()) {
+      $subtitle = pht('Archived post by %s.', $author);
     } else {
       $subtitle = pht('Written by %s on %s.', $author, $date);
     }
@@ -106,7 +118,7 @@ final class PhamePostViewController
         array(
           $user_icon,
           ' ',
-          $blogger_profile->getTitle(),
+          $blogger_profile->getDisplayTitle(),
         ))
       ->setImage($blogger->getProfileImageURI())
       ->setImageHref($author_uri);
@@ -130,12 +142,16 @@ final class PhamePostViewController
       ->setUser($viewer)
       ->setObject($post);
 
+    $is_live = $this->getIsLive();
+    $is_external = $this->getIsExternal();
     $next_view = new PhameNextPostView();
     if ($next) {
-      $next_view->setNext($next->getTitle(), $next->getLiveURI());
+      $next_view->setNext($next->getTitle(),
+        $next->getBestURI($is_live, $is_external));
     }
     if ($prev) {
-      $next_view->setPrevious($prev->getTitle(), $prev->getLiveURI());
+      $next_view->setPrevious($prev->getTitle(),
+        $prev->getBestURI($is_live, $is_external));
     }
 
     $document->setFoot($next_view);
@@ -207,12 +223,34 @@ final class PhamePostViewController
           ->setName(pht('Publish'))
           ->setDisabled(!$can_edit)
           ->setWorkflow(true));
+      $actions->addAction(
+        id(new PhabricatorActionView())
+          ->setIcon('fa-ban')
+          ->setHref($this->getApplicationURI('post/archive/'.$id.'/'))
+          ->setName(pht('Archive'))
+          ->setDisabled(!$can_edit)
+          ->setWorkflow(true));
+    } else if ($post->isArchived()) {
+      $actions->addAction(
+        id(new PhabricatorActionView())
+          ->setIcon('fa-eye')
+          ->setHref($this->getApplicationURI('post/publish/'.$id.'/'))
+          ->setName(pht('Publish'))
+          ->setDisabled(!$can_edit)
+          ->setWorkflow(true));
     } else {
       $actions->addAction(
         id(new PhabricatorActionView())
           ->setIcon('fa-eye-slash')
           ->setHref($this->getApplicationURI('post/unpublish/'.$id.'/'))
           ->setName(pht('Unpublish'))
+          ->setDisabled(!$can_edit)
+          ->setWorkflow(true));
+      $actions->addAction(
+        id(new PhabricatorActionView())
+          ->setIcon('fa-ban')
+          ->setHref($this->getApplicationURI('post/archive/'.$id.'/'))
+          ->setName(pht('Archive'))
           ->setDisabled(!$can_edit)
           ->setWorkflow(true));
     }
@@ -223,12 +261,14 @@ final class PhamePostViewController
       $live_name = pht('View Live');
     }
 
-    $actions->addAction(
-      id(new PhabricatorActionView())
-        ->setUser($viewer)
-        ->setIcon('fa-globe')
-        ->setHref($post->getLiveURI())
-        ->setName($live_name));
+    if (!$post->isArchived()) {
+      $actions->addAction(
+        id(new PhabricatorActionView())
+          ->setUser($viewer)
+          ->setIcon('fa-globe')
+          ->setHref($post->getLiveURI())
+          ->setName($live_name));
+    }
 
     return $actions;
   }
@@ -255,7 +295,7 @@ final class PhamePostViewController
 
     $query = id(new PhamePostQuery())
       ->setViewer($viewer)
-      ->withVisibility(PhameConstants::VISIBILITY_PUBLISHED)
+      ->withVisibility(array(PhameConstants::VISIBILITY_PUBLISHED))
       ->withBlogPHIDs(array($post->getBlog()->getPHID()))
       ->setLimit(1);
 
