@@ -28,6 +28,10 @@ final class PhabricatorCalendarApplication extends PhabricatorApplication {
     return "\xE2\x8C\xA8";
   }
 
+  public function getApplicationGroup() {
+    return self::GROUP_UTILITIES;
+  }
+
   public function isPrototype() {
     return true;
   }
@@ -55,6 +59,42 @@ final class PhabricatorCalendarApplication extends PhabricatorApplication {
             => 'PhabricatorCalendarEventCancelController',
           '(?P<action>join|decline|accept)/(?P<id>[1-9]\d*)/'
             => 'PhabricatorCalendarEventJoinController',
+          'export/(?P<id>[1-9]\d*)/(?P<filename>[^/]*)'
+            => 'PhabricatorCalendarEventExportController',
+          'availability/(?P<id>[1-9]\d*)/(?P<availability>[^/]+)/'
+            => 'PhabricatorCalendarEventAvailabilityController',
+        ),
+        'export/' => array(
+          $this->getQueryRoutePattern()
+            => 'PhabricatorCalendarExportListController',
+          $this->getEditRoutePattern('edit/')
+            => 'PhabricatorCalendarExportEditController',
+          '(?P<id>[1-9]\d*)/'
+            => 'PhabricatorCalendarExportViewController',
+          'ics/(?P<secretKey>[^/]+)/(?P<filename>[^/]*)'
+            => 'PhabricatorCalendarExportICSController',
+          'disable/(?P<id>[1-9]\d*)/'
+            => 'PhabricatorCalendarExportDisableController',
+        ),
+        'import/' => array(
+          $this->getQueryRoutePattern()
+            => 'PhabricatorCalendarImportListController',
+          $this->getEditRoutePattern('edit/')
+            => 'PhabricatorCalendarImportEditController',
+          '(?P<id>[1-9]\d*)/'
+            => 'PhabricatorCalendarImportViewController',
+          'disable/(?P<id>[1-9]\d*)/'
+            => 'PhabricatorCalendarImportDisableController',
+          'delete/(?P<id>[1-9]\d*)/'
+            => 'PhabricatorCalendarImportDeleteController',
+          'reload/(?P<id>[1-9]\d*)/'
+            => 'PhabricatorCalendarImportReloadController',
+          'drop/'
+            => 'PhabricatorCalendarImportDropController',
+          'log/' => array(
+            $this->getQueryRoutePattern()
+              => 'PhabricatorCalendarImportLogListController',
+          ),
         ),
       ),
     );
@@ -65,6 +105,16 @@ final class PhabricatorCalendarApplication extends PhabricatorApplication {
       array(
         'name' => pht('Calendar User Guide'),
         'href' => PhabricatorEnv::getDoclink('Calendar User Guide'),
+      ),
+      array(
+        'name' => pht('Importing Events'),
+        'href' => PhabricatorEnv::getDoclink(
+          'Calendar User Guide: Importing Events'),
+      ),
+      array(
+        'name' => pht('Exporting Events'),
+        'href' => PhabricatorEnv::getDoclink(
+          'Calendar User Guide: Exporting Events'),
       ),
     );
   }

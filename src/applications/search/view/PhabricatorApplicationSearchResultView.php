@@ -12,7 +12,6 @@ final class PhabricatorApplicationSearchResultView extends Phobject {
   private $content = null;
   private $infoView = null;
   private $actions = array();
-  private $collapsed = null;
   private $noDataString;
   private $crumbs = array();
   private $header;
@@ -70,15 +69,6 @@ final class PhabricatorApplicationSearchResultView extends Phobject {
     return $this->actions;
   }
 
-  public function setCollapsed($collapsed) {
-    $this->collapsed = $collapsed;
-    return $this;
-  }
-
-  public function getCollapsed() {
-    return $this->collapsed;
-  }
-
   public function setNoDataString($nodata) {
     $this->noDataString = $nodata;
     return $this;
@@ -103,7 +93,5 @@ final class PhabricatorApplicationSearchResultView extends Phobject {
   public function getHeader() {
     return $this->header;
   }
-
-
 
 }

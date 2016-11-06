@@ -23,7 +23,7 @@
 }
 
 .device-phone .phui-two-column-header .phui-header-header {
-  font-size: 18px;
+  font-size: 16px;
 }
 
 .phui-two-column-view .phui-two-column-header .phui-header-shell {
@@ -153,10 +153,6 @@
 .phui-two-column-view .phui-property-list-container
   .keyboard-shortcuts-available {
     display: none;
-}
-
-.phui-two-column-properties.phui-object-box {
-  border: 1px solid rgba({$alphablue}, .2);
 }
 
 .device .phui-two-column-content .phui-two-column-properties.phui-object-box {

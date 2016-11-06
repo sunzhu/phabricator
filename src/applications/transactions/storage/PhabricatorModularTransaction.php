@@ -7,6 +7,10 @@ abstract class PhabricatorModularTransaction
 
   abstract public function getBaseTransactionClass();
 
+  public function getModularType() {
+    return $this->getTransactionImplementation();
+  }
+
   final protected function getTransactionImplementation() {
     if (!$this->implementation) {
       $this->implementation = $this->newTransactionImplementation();
@@ -147,6 +151,10 @@ abstract class PhabricatorModularTransaction
     }
 
     return parent::renderChangeDetails($viewer);
+  }
+
+  final protected function newRemarkupChanges() {
+    return $this->getTransactionImplementation()->newRemarkupChanges();
   }
 
 }

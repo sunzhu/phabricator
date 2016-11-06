@@ -406,6 +406,10 @@ abstract class PhabricatorApplicationSearchEngine extends Phobject {
     return $this->getURI('query/edit/');
   }
 
+  public function getQueryBaseURI() {
+    return $this->getURI('');
+  }
+
 
   /**
    * Return the URI to a path within the application. Used to construct default
@@ -1094,12 +1098,30 @@ abstract class PhabricatorApplicationSearchEngine extends Phobject {
       }
     }
 
+    $valid_constraints = array();
+    foreach ($fields as $field) {
+      foreach ($field->getValidConstraintKeys() as $key) {
+        $valid_constraints[$key] = true;
+      }
+    }
+
+    foreach ($constraints as $key => $constraint) {
+      if (empty($valid_constraints[$key])) {
+        throw new Exception(
+          pht(
+            'Constraint "%s" is not a valid constraint for this query.',
+            $key));
+      }
+    }
+
     foreach ($fields as $field) {
       if (!$field->getValueExistsInConduitRequest($constraints)) {
         continue;
       }
 
-      $value = $field->readValueFromConduitRequest($constraints);
+      $value = $field->readValueFromConduitRequest(
+        $constraints,
+        $request->getIsStrictlyTyped());
       $saved_query->setParameter($field->getKey(), $value);
     }
 
@@ -1372,6 +1394,10 @@ abstract class PhabricatorApplicationSearchEngine extends Phobject {
 
   protected function getNewUserBody() {
     return null;
+  }
+
+  public function newUseResultsActions(PhabricatorSavedQuery $saved) {
+    return array();
   }
 
 }
