@@ -502,6 +502,15 @@ abstract class PhabricatorApplicationTransactionEditor
         return false;
     }
 
+    $type = $xaction->getTransactionType();
+    $xtype = $this->getModularTransactionType($type);
+    if ($xtype) {
+      return $xtype->getTransactionHasEffect(
+        $object,
+        $xaction->getOldValue(),
+        $xaction->getNewValue());
+    }
+
     return ($xaction->getOldValue() !== $xaction->getNewValue());
   }
 
@@ -977,6 +986,10 @@ abstract class PhabricatorApplicationTransactionEditor
       $object->killTransaction();
       throw $ex;
     }
+
+    // If we need to perform cache engine updates, execute them now.
+    id(new PhabricatorCacheEngine())
+      ->updateObject($object);
 
     // Now that we've completely applied the core transaction set, try to apply
     // Herald rules. Herald rules are allowed to either take direct actions on
