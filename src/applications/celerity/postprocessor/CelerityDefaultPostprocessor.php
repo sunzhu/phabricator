@@ -20,16 +20,16 @@ final class CelerityDefaultPostprocessor
   public function buildVariables() {
     return array(
       // Fonts
-      'basefont' => "13px 'Segoe UI', 'Segoe UI Web Regular', ".
-        "'Segoe UI Symbol', 'Lato', 'Helvetica Neue', Helvetica, ".
-        "Arial, sans-serif",
+      'basefont' => "13px 'Segoe UI', 'Segoe UI Emoji', ".
+        "'Segoe UI Symbol', 'Lato', 'Helvetica Neue', ".
+        "Helvetica, Arial, sans-serif",
 
-      'fontfamily' => "'Segoe UI', 'Segoe UI Web Regular', ".
-        "'Segoe UI Symbol', 'Lato', 'Helvetica Neue', Helvetica, ".
-        "Arial, sans-serif",
+      'fontfamily' => "'Segoe UI', 'Segoe UI Emoji', ".
+        "'Segoe UI Symbol', 'Lato', 'Helvetica Neue', ".
+        "Helvetica, Arial, sans-serif",
 
       // Drop Shadow
-      'dropshadow' => '0 1px 6px rgba(0, 0, 0, .25)',
+      'dropshadow' => '0 2px 12px rgba(0, 0, 0, .20)',
       'whitetextshadow' => '0 1px 0 rgba(255, 255, 255, 1)',
 
       // Anchors
