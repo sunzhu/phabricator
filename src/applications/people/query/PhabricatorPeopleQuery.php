@@ -287,7 +287,7 @@ final class PhabricatorPeopleQuery
         $this->realnames);
     }
 
-    if ($this->phids !== null) {
+    if (! empty($this->phids)) {
       $where[] = qsprintf(
         $conn,
         'user.phid IN (%Ls)',
