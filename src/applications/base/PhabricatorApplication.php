@@ -9,8 +9,10 @@
  * @task  meta  Application Management
  */
 abstract class PhabricatorApplication
-  extends Phobject
-  implements PhabricatorPolicyInterface {
+  extends PhabricatorLiskDAO
+  implements
+    PhabricatorPolicyInterface,
+    PhabricatorApplicationTransactionInterface {
 
   const GROUP_CORE            = 'core';
   const GROUP_UTILITIES       = 'util';
@@ -24,6 +26,30 @@ abstract class PhabricatorApplication
       self::GROUP_ADMIN         => pht('Administration'),
       self::GROUP_DEVELOPER     => pht('Developer Tools'),
     );
+  }
+
+  final public function getApplicationName() {
+    return 'application';
+  }
+
+  final public function getTableName() {
+    return 'application_application';
+  }
+
+  final protected function getConfiguration() {
+    return array(
+      self::CONFIG_AUX_PHID => true,
+    ) + parent::getConfiguration();
+  }
+
+  final public function generatePHID() {
+    return $this->getPHID();
+  }
+
+  final public function save() {
+    // When "save()" is called on applications, we just return without
+    // actually writing anything to the database.
+    return $this;
   }
 
 
@@ -251,13 +277,12 @@ abstract class PhabricatorApplication
   }
 
   final protected function getInboundEmailSupportLink() {
-    return PhabricatorEnv::getDocLink('Configuring Inbound Email');
+    return PhabricatorEnv::getDoclink('Configuring Inbound Email');
   }
 
   public function getAppEmailBlurb() {
     throw new PhutilMethodNotImplementedException();
   }
-
 
 /* -(  Fact Integration  )--------------------------------------------------- */
 
@@ -596,17 +621,42 @@ abstract class PhabricatorApplication
   protected function getProfileMenuRouting($controller) {
     $edit_route = $this->getEditRoutePattern();
 
+    $mode_route = '(?P<itemEditMode>global|custom)/';
+
     return array(
       '(?P<itemAction>view)/(?P<itemID>[^/]+)/' => $controller,
       '(?P<itemAction>hide)/(?P<itemID>[^/]+)/' => $controller,
       '(?P<itemAction>default)/(?P<itemID>[^/]+)/' => $controller,
       '(?P<itemAction>configure)/' => $controller,
-      '(?P<itemAction>reorder)/' => $controller,
+      '(?P<itemAction>configure)/'.$mode_route => $controller,
+      '(?P<itemAction>reorder)/'.$mode_route => $controller,
       '(?P<itemAction>edit)/'.$edit_route => $controller,
-      '(?P<itemAction>new)/(?<itemKey>[^/]+)/'.$edit_route => $controller,
+      '(?P<itemAction>new)/'.$mode_route.'(?<itemKey>[^/]+)/'.$edit_route
+        => $controller,
       '(?P<itemAction>builtin)/(?<itemID>[^/]+)/'.$edit_route
         => $controller,
     );
   }
 
+/* -(  PhabricatorApplicationTransactionInterface  )------------------------- */
+
+
+  public function getApplicationTransactionEditor() {
+    return new PhabricatorApplicationEditor();
+  }
+
+  public function getApplicationTransactionObject() {
+    return $this;
+  }
+
+  public function getApplicationTransactionTemplate() {
+    return new PhabricatorApplicationApplicationTransaction();
+  }
+
+  public function willRenderTimeline(
+    PhabricatorApplicationTransactionView $timeline,
+    AphrontRequest $request) {
+
+    return $timeline;
+  }
 }

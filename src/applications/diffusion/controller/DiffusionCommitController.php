@@ -705,7 +705,11 @@ final class DiffusionCommitController extends DiffusionController {
     $timeline = $this->buildTransactionTimeline(
       $commit,
       new PhabricatorAuditTransactionQuery());
+
     $commit->willRenderTimeline($timeline, $this->getRequest());
+
+    $timeline->setQuoteRef($commit->getMonogram());
+
     return $timeline;
   }
 
@@ -715,8 +719,6 @@ final class DiffusionCommitController extends DiffusionController {
 
     $request = $this->getRequest();
     $viewer = $request->getUser();
-
-    Javelin::initBehavior('differential-keyboard-navigation');
 
     // TODO: This is pretty awkward, unify the CSS between Diffusion and
     // Differential better.
@@ -854,12 +856,6 @@ final class DiffusionCommitController extends DiffusionController {
         PhabricatorAuditStatusConstants::getStatusIcon($code),
         PhabricatorAuditStatusConstants::getStatusColor($code),
         PhabricatorAuditStatusConstants::getStatusName($code));
-
-      $note = array();
-      foreach ($request->getAuditReasons() as $reason) {
-        $note[] = phutil_tag('div', array(), $reason);
-      }
-      $item->setNote($note);
 
       $auditor_phid = $request->getAuditorPHID();
       $target = $viewer->renderHandle($auditor_phid);

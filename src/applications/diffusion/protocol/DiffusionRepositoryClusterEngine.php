@@ -335,7 +335,8 @@ final class DiffusionRepositoryClusterEngine extends Phobject {
         pht(
           'Failed to acquire write lock after waiting %s second(s). You '.
           'may be able to retry later.',
-          new PhutilNumber($lock_wait)));
+          new PhutilNumber($lock_wait)),
+        $ex);
     }
 
     $versions = PhabricatorRepositoryWorkingCopyVersion::loadVersions(
@@ -558,8 +559,7 @@ final class DiffusionRepositoryClusterEngine extends Phobject {
       return false;
     }
 
-    // TODO: For now, this is only supported for Git.
-    if (!$repository->isGit()) {
+    if (!$repository->supportsSynchronization()) {
       return false;
     }
 

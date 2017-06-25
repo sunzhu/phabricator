@@ -17,7 +17,7 @@ final class DiffusionCommitRequiredActionResultBucket
 
     $this->objects = $objects;
 
-    $phids = $query->getEvaluatedParameter('responsiblePHIDs', array());
+    $phids = $query->getEvaluatedParameter('responsiblePHIDs');
     if (!$phids) {
       throw new Exception(
         pht(
@@ -128,6 +128,10 @@ final class DiffusionCommitRequiredActionResultBucket
     $should_audit = array_fuse($should_audit);
 
     foreach ($objects as $key => $object) {
+      if (isset($phids[$object->getAuthorPHID()])) {
+        continue;
+      }
+
       if (!$this->hasAuditorsWithStatus($object, $phids, $should_audit)) {
         continue;
       }

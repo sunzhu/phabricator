@@ -2,7 +2,7 @@
 
 final class PhabricatorAuditListView extends AphrontView {
 
-  private $commits;
+  private $commits = array();
   private $header;
   private $showDrafts;
   private $noDataString;
@@ -140,6 +140,7 @@ final class PhabricatorAuditListView extends AphrontView {
         ->setObjectName($commit_name)
         ->setHeader($commit_desc)
         ->setHref($commit_link)
+        ->setDisabled($commit->isUnreachable())
         ->addByline(pht('Author: %s', $author_name))
         ->addIcon('none', $committed);
 
