@@ -281,6 +281,12 @@ final class DifferentialRevisionViewController extends DifferentialController {
       ->setTitle(pht('Diff %s', $target->getID()))
       ->setBackground(PHUIObjectBoxView::BLUE_PROPERTY);
 
+
+    $revision_id = $revision->getID();
+    $inline_list_uri = "/revision/inlines/{$revision_id}/";
+    $inline_list_uri = $this->getApplicationURI($inline_list_uri);
+    $changeset_view->setInlineListURI($inline_list_uri);
+
     if ($repository) {
       $changeset_view->setRepository($repository);
     }
@@ -607,6 +613,29 @@ final class DifferentialRevisionViewController extends DifferentialController {
     $relationship_submenu = $relationship_list->newActionMenu();
     if ($relationship_submenu) {
       $curtain->addAction($relationship_submenu);
+    }
+
+    $repository = $revision->getRepository();
+    if ($repository && $repository->canPerformAutomation()) {
+      $revision_id = $revision->getID();
+
+      $op = new DrydockLandRepositoryOperation();
+      $barrier = $op->getBarrierToLanding($viewer, $revision);
+
+      if ($barrier) {
+        $can_land = false;
+      } else {
+        $can_land = true;
+      }
+
+      $action = id(new PhabricatorActionView())
+        ->setName(pht('Land Revision'))
+        ->setIcon('fa-fighter-jet')
+        ->setHref("/differential/revision/operation/{$revision_id}/")
+        ->setWorkflow(true)
+        ->setDisabled(!$can_land);
+
+      $curtain->addAction($action);
     }
 
     return $curtain;

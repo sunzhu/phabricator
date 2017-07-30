@@ -59,8 +59,11 @@ final class DiffusionHistoryController extends DiffusionController {
       ->addClass('mlb')
       ->appendChild($pager);
 
+    $tabs = $this->buildTabsView('history');
+
     $view = id(new PHUITwoColumnView())
       ->setHeader($header)
+      ->setTabs($tabs)
       ->setFooter(array(
         $history_list,
         $pager,
@@ -76,25 +79,17 @@ final class DiffusionHistoryController extends DiffusionController {
   private function buildHeader(DiffusionRequest $drequest) {
     $viewer = $this->getViewer();
 
-    $tag = $this->renderCommitHashTag($drequest);
-    $browse_uri = $drequest->generateURI(
-      array(
-        'action' => 'browse',
-      ));
-
-    $browse_button = id(new PHUIButtonView())
-      ->setTag('a')
-      ->setText(pht('Browse'))
-      ->setHref($browse_uri)
-      ->setIcon('fa-code');
+    $no_path = !strlen($drequest->getPath());
+    if ($no_path) {
+      $header_text = pht('History');
+    } else {
+      $header_text = $this->renderPathLinks($drequest, $mode = 'history');
+    }
 
     $header = id(new PHUIHeaderView())
       ->setUser($viewer)
-      ->setPolicyObject($drequest->getRepository())
-      ->addTag($tag)
-      ->setHeader($this->renderPathLinks($drequest, $mode = 'history'))
-      ->setHeaderIcon('fa-clock-o')
-      ->addActionLink($browse_button);
+      ->setHeader($header_text)
+      ->setHeaderIcon('fa-clock-o');
 
     return $header;
 

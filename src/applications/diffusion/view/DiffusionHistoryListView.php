@@ -7,7 +7,7 @@ final class DiffusionHistoryListView extends DiffusionHistoryView {
     $viewer = $this->getUser();
     $repository = $drequest->getRepository();
 
-    require_celerity_resource('diffusion-history-css');
+    require_celerity_resource('diffusion-css');
     Javelin::initBehavior('phabricator-tooltips');
 
     $buildables = $this->loadBuildables(
@@ -119,19 +119,7 @@ final class DiffusionHistoryListView extends DiffusionHistoryView {
       if ($show_builds) {
         $buildable = idx($buildables, $commit->getPHID());
         if ($buildable !== null) {
-          $status = $buildable->getBuildableStatus();
-          $icon = HarbormasterBuildable::getBuildableStatusIcon($status);
-          $color = HarbormasterBuildable::getBuildableStatusColor($status);
-          $name = HarbormasterBuildable::getBuildableStatusName($status);
-          $build_view = id(new PHUIButtonView())
-            ->setTag('a')
-            ->setText($name)
-            ->setIcon($icon)
-            ->setColor($color)
-            ->setHref('/'.$buildable->getMonogram())
-            ->addClass('mmr')
-            ->setButtonType(PHUIButtonView::BUTTONTYPE_SIMPLE)
-            ->addClass('diffusion-list-build-status');
+          $build_view = $this->renderBuildable($buildable, 'button');
         }
       }
 
