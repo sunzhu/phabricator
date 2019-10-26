@@ -43,6 +43,7 @@ final class DifferentialGetRevisionConduitAPIMethod
       ->withIDs(array($revision_id))
       ->setViewer($request->getUser())
       ->needReviewers(true)
+      ->needCommitPHIDs(true)
       ->executeOne();
 
     if (!$revision) {
@@ -59,7 +60,7 @@ final class DifferentialGetRevisionConduitAPIMethod
     $diff_dicts = mpull($diffs, 'getDiffDict');
 
     $commit_dicts = array();
-    $commit_phids = $revision->loadCommitPHIDs();
+    $commit_phids = $revision->getCommitPHIDs();
     $handles = id(new PhabricatorHandleQuery())
       ->setViewer($request->getUser())
       ->withPHIDs($commit_phids)
@@ -82,10 +83,8 @@ final class DifferentialGetRevisionConduitAPIMethod
       'authorPHID' => $revision->getAuthorPHID(),
       'uri' => PhabricatorEnv::getURI('/D'.$revision->getID()),
       'title' => $revision->getTitle(),
-      'status' => $revision->getStatus(),
-      'statusName'  =>
-        ArcanistDifferentialRevisionStatus::getNameForRevisionStatus(
-          $revision->getStatus()),
+      'status' => $revision->getLegacyRevisionStatus(),
+      'statusName'  => $revision->getStatusDisplayName(),
       'summary' => $revision->getSummary(),
       'testPlan' => $revision->getTestPlan(),
       'lineCount' => $revision->getLineCount(),

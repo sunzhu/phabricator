@@ -81,12 +81,12 @@ abstract class DiffusionView extends AphrontView {
     }
 
     if (isset($details['external'])) {
-      $href = id(new PhutilURI('/diffusion/external/'))
-        ->setQueryParams(
-          array(
-            'uri' => idx($details, 'external'),
-            'id'  => idx($details, 'hash'),
-          ));
+      $params = array(
+        'uri' => idx($details, 'external'),
+        'id'  => idx($details, 'hash'),
+      );
+
+      $href = new PhutilURI('/diffusion/external/', $params);
       $tip = pht('Browse External');
     } else {
       $href = $this->getDiffusionRequest()->generateURI(
@@ -169,19 +169,6 @@ abstract class DiffusionView extends AphrontView {
       $detail);
   }
 
-  final public static function linkRevision($id) {
-    if (!$id) {
-      return null;
-    }
-
-    return phutil_tag(
-      'a',
-      array(
-        'href' => "/D{$id}",
-      ),
-      "D{$id}");
-  }
-
   final public static function renderName($name) {
     $email = new PhutilEmailAddress($name);
     if ($email->getDisplayName() && $email->getDomainName()) {
@@ -205,12 +192,11 @@ abstract class DiffusionView extends AphrontView {
   final protected function renderBuildable(
     HarbormasterBuildable $buildable,
     $type = null) {
-    $status = $buildable->getBuildableStatus();
     Javelin::initBehavior('phabricator-tooltips');
 
-    $icon = HarbormasterBuildable::getBuildableStatusIcon($status);
-    $color = HarbormasterBuildable::getBuildableStatusColor($status);
-    $name = HarbormasterBuildable::getBuildableStatusName($status);
+    $icon = $buildable->getStatusIcon();
+    $color = $buildable->getStatusColor();
+    $name = $buildable->getStatusDisplayName();
 
     if ($type == 'button') {
       return id(new PHUIButtonView())

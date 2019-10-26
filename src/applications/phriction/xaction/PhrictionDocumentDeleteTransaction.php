@@ -1,7 +1,7 @@
 <?php
 
 final class PhrictionDocumentDeleteTransaction
-  extends PhrictionDocumentTransactionType {
+  extends PhrictionDocumentVersionTransaction {
 
   const TRANSACTIONTYPE = 'delete';
 
@@ -11,16 +11,15 @@ final class PhrictionDocumentDeleteTransaction
 
   public function applyInternalEffects($object, $value) {
     $object->setStatus(PhrictionDocumentStatus::STATUS_DELETED);
-  }
 
-  public function applyExternalEffects($object, $value) {
-    $this->getEditor()->getNewContent()->setContent('');
-    $this->getEditor()->getNewContent()->setChangeType(
-      PhrictionChangeType::CHANGE_DELETE);
+    $content = $this->getNewDocumentContent($object);
+
+    $content->setContent('');
+    $content->setChangeType(PhrictionChangeType::CHANGE_DELETE);
   }
 
   public function getActionStrength() {
-    return 1.5;
+    return 150;
   }
 
   public function getActionName() {

@@ -9,8 +9,11 @@ final class PhabricatorProject extends PhabricatorProjectDAO
     PhabricatorCustomFieldInterface,
     PhabricatorDestructibleInterface,
     PhabricatorFulltextInterface,
+    PhabricatorFerretInterface,
     PhabricatorConduitResultInterface,
-    PhabricatorColumnProxyInterface {
+    PhabricatorColumnProxyInterface,
+    PhabricatorSpacesInterface,
+    PhabricatorEditEngineSubtypeInterface {
 
   protected $name;
   protected $status = PhabricatorProjectStatus::STATUS_ACTIVE;
@@ -37,6 +40,8 @@ final class PhabricatorProject extends PhabricatorProjectDAO
   protected $projectPathKey;
 
   protected $properties = array();
+  protected $spacePHID;
+  protected $subtype;
 
   private $memberPHIDs = self::ATTACHABLE;
   private $watcherPHIDs = self::ATTACHABLE;
@@ -53,12 +58,16 @@ final class PhabricatorProject extends PhabricatorProjectDAO
   const ITEM_PROFILE = 'project.profile';
   const ITEM_POINTS = 'project.points';
   const ITEM_WORKBOARD = 'project.workboard';
+  const ITEM_REPORTS = 'project.reports';
   const ITEM_MEMBERS = 'project.members';
   const ITEM_MANAGE = 'project.manage';
   const ITEM_MILESTONES = 'project.milestones';
   const ITEM_SUBPROJECTS = 'project.subprojects';
 
-  public static function initializeNewProject(PhabricatorUser $actor) {
+  public static function initializeNewProject(
+    PhabricatorUser $actor,
+    PhabricatorProject $parent = null) {
+
     $app = id(new PhabricatorApplicationQuery())
       ->setViewer(PhabricatorUser::getOmnipotentUser())
       ->withClasses(array('PhabricatorProjectApplication'))
@@ -71,6 +80,14 @@ final class PhabricatorProject extends PhabricatorProjectDAO
     $join_policy = $app->getPolicy(
       ProjectDefaultJoinCapability::CAPABILITY);
 
+    // If this is the child of some other project, default the Space to the
+    // Space of the parent.
+    if ($parent) {
+      $space_phid = $parent->getSpacePHID();
+    } else {
+      $space_phid = $actor->getDefaultSpacePHID();
+    }
+
     $default_icon = PhabricatorProjectIconSet::getDefaultIconKey();
     $default_color = PhabricatorProjectIconSet::getDefaultColorKey();
 
@@ -81,12 +98,14 @@ final class PhabricatorProject extends PhabricatorProjectDAO
       ->setViewPolicy($view_policy)
       ->setEditPolicy($edit_policy)
       ->setJoinPolicy($join_policy)
+      ->setSpacePHID($space_phid)
       ->setIsMembershipLocked(0)
       ->attachMemberPHIDs(array())
       ->attachSlugs(array())
       ->setHasWorkboard(0)
       ->setHasMilestones(0)
       ->setHasSubprojects(0)
+      ->setSubtype(PhabricatorEditEngineSubtype::SUBTYPE_DEFAULT)
       ->attachParentProject(null);
   }
 
@@ -222,6 +241,7 @@ final class PhabricatorProject extends PhabricatorProjectDAO
         'projectPath' => 'hashpath64',
         'projectDepth' => 'uint32',
         'projectPathKey' => 'bytes4',
+        'subtype' => 'text64',
       ),
       self::CONFIG_KEY_SCHEMA => array(
         'key_icon' => array(
@@ -373,6 +393,14 @@ final class PhabricatorProject extends PhabricatorProjectDAO
     return "/project/profile/{$id}/";
   }
 
+  public function getWorkboardURI() {
+    return urisprintf('/project/board/%d/', $this->getID());
+  }
+
+  public function getReportsURI() {
+    return urisprintf('/project/reports/%d/', $this->getID());
+  }
+
   public function save() {
     if (!$this->getMailKey()) {
       $this->setMailKey(Filesystem::readRandomCharacters(20));
@@ -452,7 +480,7 @@ final class PhabricatorProject extends PhabricatorProjectDAO
       foreach (PhabricatorLiskDAO::chunkSQL($sql) as $chunk) {
         queryfx(
           $conn_w,
-          'INSERT INTO %T (projectID, token) VALUES %Q',
+          'INSERT INTO %T (projectID, token) VALUES %LQ',
           $table,
           $chunk);
       }
@@ -680,19 +708,19 @@ final class PhabricatorProject extends PhabricatorProjectDAO
     return new PhabricatorProjectTransactionEditor();
   }
 
-  public function getApplicationTransactionObject() {
-    return $this;
-  }
-
   public function getApplicationTransactionTemplate() {
     return new PhabricatorProjectTransaction();
   }
 
-  public function willRenderTimeline(
-    PhabricatorApplicationTransactionView $timeline,
-    AphrontRequest $request) {
 
-    return $timeline;
+/* -(  PhabricatorSpacesInterface  )----------------------------------------- */
+
+
+  public function getSpacePHID() {
+    if ($this->isMilestone()) {
+      return $this->getParentProject()->getSpacePHID();
+    }
+    return $this->spacePHID;
   }
 
 
@@ -729,6 +757,14 @@ final class PhabricatorProject extends PhabricatorProjectDAO
   }
 
 
+/* -(  PhabricatorFerretInterface  )--------------------------------------- */
+
+
+  public function newFerretEngine() {
+    return new PhabricatorProjectFerretEngine();
+  }
+
+
 /* -(  PhabricatorConduitResultInterface  )---------------------------------- */
 
 
@@ -742,6 +778,10 @@ final class PhabricatorProject extends PhabricatorProjectDAO
         ->setKey('slug')
         ->setType('string')
         ->setDescription(pht('Primary slug/hashtag.')),
+      id(new PhabricatorConduitSearchFieldSpecification())
+        ->setKey('subtype')
+        ->setType('string')
+        ->setDescription(pht('Subtype of the project.')),
       id(new PhabricatorConduitSearchFieldSpecification())
         ->setKey('milestone')
         ->setType('int?')
@@ -791,6 +831,7 @@ final class PhabricatorProject extends PhabricatorProjectDAO
     return array(
       'name' => $this->getName(),
       'slug' => $this->getPrimarySlug(),
+      'subtype' => $this->getSubtype(),
       'milestone' => $milestone,
       'depth' => (int)$this->getProjectDepth(),
       'parent' => $parent_ref,
@@ -849,5 +890,28 @@ final class PhabricatorProject extends PhabricatorProjectDAO
     return null;
   }
 
+
+/* -(  PhabricatorEditEngineSubtypeInterface  )------------------------------ */
+
+
+  public function getEditEngineSubtype() {
+    return $this->getSubtype();
+  }
+
+  public function setEditEngineSubtype($value) {
+    return $this->setSubtype($value);
+  }
+
+  public function newEditEngineSubtypeMap() {
+    $config = PhabricatorEnv::getEnvConfig('projects.subtypes');
+    return PhabricatorEditEngineSubtype::newSubtypeMap($config)
+      ->setDatasource(new PhabricatorProjectSubtypeDatasource());
+  }
+
+  public function newSubtypeObject() {
+    $subtype_key = $this->getEditEngineSubtype();
+    $subtype_map = $this->newEditEngineSubtypeMap();
+    return $subtype_map->getSubtype($subtype_key);
+  }
 
 }

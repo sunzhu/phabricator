@@ -18,14 +18,25 @@ final class PhabricatorProjectViewController
     $project = $this->getProject();
 
     $engine = $this->getProfileMenuEngine();
-    $default = $engine->getDefaultItem();
+    $default = $engine->getDefaultMenuItemConfiguration();
 
-    switch ($default->getBuiltinKey()) {
+    // If defaults are broken somehow, serve the manage page. See T13033 for
+    // discussion.
+    if ($default) {
+      $default_key = $default->getBuiltinKey();
+    } else {
+      $default_key = PhabricatorProject::ITEM_MANAGE;
+    }
+
+    switch ($default_key) {
       case PhabricatorProject::ITEM_WORKBOARD:
         $controller_object = new PhabricatorProjectBoardViewController();
         break;
       case PhabricatorProject::ITEM_PROFILE:
         $controller_object = new PhabricatorProjectProfileController();
+        break;
+      case PhabricatorProject::ITEM_MANAGE:
+        $controller_object = new PhabricatorProjectManageController();
         break;
       default:
         return $engine->buildResponse();

@@ -22,11 +22,12 @@ final class PhabricatorSystemApplication extends PhabricatorApplication {
       '/services/' => array(
         'encoding/' => 'PhabricatorSystemSelectEncodingController',
         'highlight/' => 'PhabricatorSystemSelectHighlightController',
+        'viewas/' => 'PhabricatorSystemSelectViewAsController',
       ),
       '/readonly/' => array(
         '(?P<reason>[^/]+)/' => 'PhabricatorSystemReadOnlyController',
       ),
-      '/favicon.ico' => 'PhabricatorSystemFaviconController',
+      '/object/(?P<name>[^/]+)/' => 'PhabricatorSystemObjectController',
     );
   }
 

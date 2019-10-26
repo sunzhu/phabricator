@@ -53,13 +53,13 @@ final class PhabricatorNotificationQuery
 
     $data = queryfx_all(
       $conn,
-      'SELECT story.*, notif.hasViewed FROM %T notif
-         JOIN %T story ON notif.chronologicalKey = story.chronologicalKey
+      'SELECT story.*, notification.hasViewed FROM %R notification
+         JOIN %R story ON notification.chronologicalKey = story.chronologicalKey
          %Q
-         ORDER BY notif.chronologicalKey DESC
+         ORDER BY notification.chronologicalKey DESC
          %Q',
-      $notification_table->getTableName(),
-      $story_table->getTableName(),
+      $notification_table,
+      $story_table,
       $this->buildWhereClause($conn),
       $this->buildLimitClause($conn));
 
@@ -76,35 +76,90 @@ final class PhabricatorNotificationQuery
     return $stories;
   }
 
-  protected function buildWhereClause(AphrontDatabaseConnection $conn_r) {
-    $where = array();
+  protected function buildWhereClauseParts(AphrontDatabaseConnection $conn) {
+    $where = parent::buildWhereClauseParts($conn);
 
     if ($this->userPHIDs !== null) {
       $where[] = qsprintf(
-        $conn_r,
-        'notif.userPHID IN (%Ls)',
+        $conn,
+        'notification.userPHID IN (%Ls)',
         $this->userPHIDs);
     }
 
     if ($this->unread !== null) {
       $where[] = qsprintf(
-        $conn_r,
-        'notif.hasViewed = %d',
+        $conn,
+        'notification.hasViewed = %d',
         (int)!$this->unread);
     }
 
-    if ($this->keys) {
+    if ($this->keys !== null) {
       $where[] = qsprintf(
-        $conn_r,
-        'notif.chronologicalKey IN (%Ls)',
+        $conn,
+        'notification.chronologicalKey IN (%Ls)',
         $this->keys);
     }
 
-    return $this->formatWhereClause($where);
+    return $where;
   }
 
-  protected function getResultCursor($item) {
-    return $item->getChronologicalKey();
+  protected function willFilterPage(array $stories) {
+    foreach ($stories as $key => $story) {
+      if (!$story->isVisibleInNotifications()) {
+        unset($stories[$key]);
+      }
+    }
+
+    return $stories;
+  }
+
+  protected function getDefaultOrderVector() {
+    return array('key');
+  }
+
+  public function getBuiltinOrders() {
+    return array(
+      'newest' => array(
+        'vector' => array('key'),
+        'name' => pht('Creation (Newest First)'),
+        'aliases' => array('created'),
+      ),
+      'oldest' => array(
+        'vector' => array('-key'),
+        'name' => pht('Creation (Oldest First)'),
+      ),
+    );
+  }
+
+  public function getOrderableColumns() {
+    return array(
+      'key' => array(
+        'table' => 'notification',
+        'column' => 'chronologicalKey',
+        'type' => 'string',
+        'unique' => true,
+      ),
+    );
+  }
+
+  protected function applyExternalCursorConstraintsToQuery(
+    PhabricatorCursorPagedPolicyAwareQuery $subquery,
+    $cursor) {
+    $subquery->withKeys(array($cursor));
+  }
+
+  protected function newExternalCursorStringForResult($object) {
+    return $object->getChronologicalKey();
+  }
+
+  protected function newPagingMapFromPartialObject($object) {
+    return array(
+      'key' => $object->getChronologicalKey(),
+    );
+  }
+
+  protected function getPrimaryTableAlias() {
+    return 'notification';
   }
 
   public function getQueryApplicationClass() {

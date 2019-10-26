@@ -63,7 +63,7 @@ final class PhabricatorAuditListView extends AphrontView {
       return $summary;
     }
 
-    // No summary, so either this is still impoting or just has an empty
+    // No summary, so either this is still importing or just has an empty
     // commit message.
 
     if (!$commit->isImported()) {
@@ -120,14 +120,11 @@ final class PhabricatorAuditListView extends AphrontView {
       $commit_desc = $this->getCommitDescription($commit_phid);
       $committed = phabricator_datetime($commit->getEpoch(), $viewer);
 
-      $status = $commit->getAuditStatus();
+      $status = $commit->getAuditStatusObject();
 
-      $status_text =
-        PhabricatorAuditCommitStatusConstants::getStatusName($status);
-      $status_color =
-        PhabricatorAuditCommitStatusConstants::getStatusColor($status);
-      $status_icon =
-        PhabricatorAuditCommitStatusConstants::getStatusIcon($status);
+      $status_text = $status->getName();
+      $status_color = $status->getColor();
+      $status_icon = $status->getIcon();
 
       $author_phid = $commit->getAuthorPHID();
       if ($author_phid) {

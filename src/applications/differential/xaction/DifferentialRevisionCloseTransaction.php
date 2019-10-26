@@ -10,7 +10,8 @@ final class DifferentialRevisionCloseTransaction
     return pht('Close Revision');
   }
 
-  protected function getRevisionActionDescription() {
+  protected function getRevisionActionDescription(
+    DifferentialRevision $revision) {
     return pht('This revision will be closed.');
   }
 
@@ -35,21 +36,30 @@ final class DifferentialRevisionCloseTransaction
   }
 
   public function applyInternalEffects($object, $value) {
-    $status_closed = ArcanistDifferentialRevisionStatus::CLOSED;
-    $status_accepted = ArcanistDifferentialRevisionStatus::ACCEPTED;
+    $was_accepted = $object->isAccepted();
 
-    $old_status = $object->getStatus();
-
-    $object->setStatus($status_closed);
-
-    $was_accepted = ($old_status == $status_accepted);
+    $status_published = DifferentialRevisionStatus::PUBLISHED;
+    $object->setModernRevisionStatus($status_published);
 
     $object->setProperty(
       DifferentialRevision::PROPERTY_CLOSED_FROM_ACCEPTED,
       $was_accepted);
+
+    // See T13300. When a revision is closed, we promote it out of "Draft"
+    // immediately. This usually happens when a user creates a draft revision
+    // and then lands the associated commit before the revision leaves draft.
+    $object->setShouldBroadcast(true);
   }
 
   protected function validateAction($object, PhabricatorUser $viewer) {
+    if ($this->hasEditor()) {
+      if ($this->getEditor()->getIsCloseByCommit()) {
+        // If we're closing a revision because we discovered a commit, we don't
+        // care what state it was in.
+        return;
+      }
+    }
+
     if ($object->isClosed()) {
       throw new Exception(
         pht(
@@ -78,9 +88,51 @@ final class DifferentialRevisionCloseTransaction
   }
 
   public function getTitle() {
-    return pht(
-      '%s closed this revision.',
-      $this->renderAuthor());
+    $commit_phid = $this->getMetadataValue('commitPHID');
+    if ($commit_phid) {
+      $commit = id(new DiffusionCommitQuery())
+        ->setViewer($this->getViewer())
+        ->withPHIDs(array($commit_phid))
+        ->needIdentities(true)
+        ->executeOne();
+    } else {
+      $commit = null;
+    }
+
+    if (!$commit) {
+      return pht(
+        '%s closed this revision.',
+        $this->renderAuthor());
+    }
+
+    $author_phid = null;
+    if ($commit->hasAuthorIdentity()) {
+      $identity = $commit->getAuthorIdentity();
+      $author_phid = $identity->getIdentityDisplayPHID();
+    }
+
+    $committer_phid = null;
+    if ($commit->hasCommitterIdentity()) {
+      $identity = $commit->getCommitterIdentity();
+      $committer_phid = $identity->getIdentityDisplayPHID();
+    }
+
+    if (!$author_phid) {
+      return pht(
+        'Closed by commit %s.',
+        $this->renderHandle($commit_phid));
+    } else if (!$committer_phid || ($committer_phid === $author_phid)) {
+      return pht(
+        'Closed by commit %s (authored by %s).',
+        $this->renderHandle($commit_phid),
+        $this->renderHandle($author_phid));
+    } else {
+      return pht(
+        'Closed by commit %s (authored by %s, committed by %s).',
+        $this->renderHandle($commit_phid),
+        $this->renderHandle($author_phid),
+        $this->renderHandle($committer_phid));
+    }
   }
 
   public function getTitleForFeed() {
@@ -88,6 +140,24 @@ final class DifferentialRevisionCloseTransaction
       '%s closed %s.',
       $this->renderAuthor(),
       $this->renderObject());
+  }
+
+  public function getTransactionTypeForConduit($xaction) {
+    return 'close';
+  }
+
+  public function getFieldValuesForConduit($object, $data) {
+    $commit_phid = $object->getMetadataValue('commitPHID');
+
+    if ($commit_phid) {
+      $commit_phids = array($commit_phid);
+    } else {
+      $commit_phids = array();
+    }
+
+    return array(
+      'commitPHIDs' => $commit_phids,
+    );
   }
 
 }

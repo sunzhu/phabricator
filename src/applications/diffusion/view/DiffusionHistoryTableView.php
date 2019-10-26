@@ -114,10 +114,10 @@ final class DiffusionHistoryTableView extends DiffusionHistoryView {
           'type' => $history->getFileType(),
         ));
 
-      $status = $commit->getAuditStatus();
-      $icon = PhabricatorAuditCommitStatusConstants::getStatusIcon($status);
-      $color = PhabricatorAuditCommitStatusConstants::getStatusColor($status);
-      $name = PhabricatorAuditCommitStatusConstants::getStatusName($status);
+      $status = $commit->getAuditStatusObject();
+      $icon = $status->getIcon();
+      $color = $status->getColor();
+      $name = $status->getName();
 
       $audit_view = id(new PHUIIconView())
         ->setIcon($icon, $color)
@@ -127,6 +127,20 @@ final class DiffusionHistoryTableView extends DiffusionHistoryView {
             'tip' => $name,
           ));
 
+      $revision_link = null;
+      if ($commit) {
+        $revisions = $this->getRevisionsForCommit($commit);
+        if ($revisions) {
+          $revision = head($revisions);
+          $revision_link = phutil_tag(
+            'a',
+            array(
+              'href' => $revision->getURI(),
+            ),
+            $revision->getMonogram());
+        }
+      }
+
       $rows[] = array(
         $graph ? $graph[$ii++] : null,
         $browse,
@@ -135,9 +149,7 @@ final class DiffusionHistoryTableView extends DiffusionHistoryView {
           $history->getCommitIdentifier()),
         $build,
         $audit_view,
-        ($commit ?
-          self::linkRevision(idx($this->getRevisions(), $commit->getPHID())) :
-          null),
+        $revision_link,
         $author,
         $summary,
         $committed,

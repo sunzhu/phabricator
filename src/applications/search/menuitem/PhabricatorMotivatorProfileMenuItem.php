@@ -50,7 +50,7 @@ final class PhabricatorMotivatorProfileMenuItem
     );
   }
 
-  protected function newNavigationMenuItems(
+  protected function newMenuItemViewList(
     PhabricatorProfileMenuItemConfiguration $config) {
 
     $source = $config->getMenuItemProperty('source');
@@ -66,11 +66,11 @@ final class PhabricatorMotivatorProfileMenuItem
 
     $fact_text = $this->selectFact($facts);
 
-    $item = $this->newItem()
+    $item = $this->newItemView()
       ->setName($fact_name)
       ->setIcon($fact_icon)
       ->setTooltip($fact_text)
-      ->setHref('#');
+      ->setURI('#');
 
     return array(
       $item,
@@ -80,7 +80,7 @@ final class PhabricatorMotivatorProfileMenuItem
   private function getCatFacts() {
     return array(
       pht('Cats purr when they are happy, upset, or asleep.'),
-      pht('The first cats evolved on the savanah about 8,000 years ago.'),
+      pht('The first cats evolved on the savannah about 8,000 years ago.'),
       pht(
         'Cats have a tail, two feet, between one and three ears, and two '.
         'other feet.'),
@@ -111,7 +111,7 @@ final class PhabricatorMotivatorProfileMenuItem
       pht(
         'Not all cats can retract their claws, but most of them can.'),
       pht(
-        'In the wild, cats and racoons sometimes hunt together in packs.'),
+        'In the wild, cats and raccoons sometimes hunt together in packs.'),
       pht(
         'The Spanish word for cat is "cato". The biggest cat is called '.
         '"el cato".'),

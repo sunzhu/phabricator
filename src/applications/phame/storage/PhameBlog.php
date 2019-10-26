@@ -10,7 +10,8 @@ final class PhameBlog extends PhameDAO
     PhabricatorDestructibleInterface,
     PhabricatorApplicationTransactionInterface,
     PhabricatorConduitResultInterface,
-    PhabricatorFulltextInterface {
+    PhabricatorFulltextInterface,
+    PhabricatorFerretInterface {
 
   const MARKUP_FIELD_DESCRIPTION = 'markup:description';
 
@@ -330,18 +331,8 @@ final class PhameBlog extends PhameDAO
     return new PhameBlogEditor();
   }
 
-  public function getApplicationTransactionObject() {
-    return $this;
-  }
-
   public function getApplicationTransactionTemplate() {
     return new PhameBlogTransaction();
-  }
-
-  public function willRenderTimeline(
-    PhabricatorApplicationTransactionView $timeline,
-    AphrontRequest $request) {
-    return $timeline;
   }
 
 
@@ -390,6 +381,14 @@ final class PhameBlog extends PhameDAO
 
   public function newFulltextEngine() {
     return new PhameBlogFulltextEngine();
+  }
+
+
+/* -(  PhabricatorFerretInterface  )----------------------------------------- */
+
+
+  public function newFerretEngine() {
+    return new PhameBlogFerretEngine();
   }
 
 }

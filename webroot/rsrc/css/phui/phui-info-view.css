@@ -46,8 +46,11 @@ div.phui-info-view.phui-info-severity-plain {
 }
 
 .phui-info-view-body tt {
-  padding: 0 2px;
-  background-color: rgba({$alphagrey},.1);
+  color: {$blacktext};
+  background: rgba({$alphablue},0.1);
+  padding: 1px 4px;
+  border-radius: 3px;
+  white-space: pre-wrap;
 }
 
 .phui-info-view-actions {
@@ -71,8 +74,8 @@ h1.phui-info-view-head {
 }
 
 .phui-info-view-list {
-  margin: 0;
-  list-style: none;
+  margin-left: 30px;
+  list-style: disc;
   line-height: 1.6em;
 }
 
@@ -88,6 +91,15 @@ h1.phui-info-view-head {
 
 .phui-info-severity-error .phui-info-icon {
   color: {$red};
+}
+
+.phui-info-severity-mfa {
+  border-color: {$blue};
+  border-left-width: 6px;
+}
+
+.phui-info-severity-mfa .phui-info-icon {
+  color: {$blue};
 }
 
 .phui-info-severity-warning {
@@ -135,4 +147,8 @@ h1.phui-info-view-head {
 
 div.phui-object-box .phui-header-shell + .phui-info-view {
   margin: 16px 0 8px;
+}
+
+div.phui-object-box.phui-box-white-config .phui-header-shell + .phui-info-view {
+  margin: 20px 16px 8px;
 }

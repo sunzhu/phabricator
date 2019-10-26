@@ -49,6 +49,58 @@ final class AphrontRequest extends Phobject {
     return idx($this->uriData, $key, $default);
   }
 
+  /**
+   * Read line range parameter data from the request.
+   *
+   * Applications like Paste, Diffusion, and Harbormaster use "$12-14" in the
+   * URI to allow users to link to particular lines.
+   *
+   * @param string URI data key to pull line range information from.
+   * @param int|null Maximum length of the range.
+   * @return null|pair<int, int> Null, or beginning and end of the range.
+   */
+  public function getURILineRange($key, $limit) {
+    $range = $this->getURIData($key);
+    return self::parseURILineRange($range, $limit);
+  }
+
+  public static function parseURILineRange($range, $limit) {
+    if (!strlen($range)) {
+      return null;
+    }
+
+    $range = explode('-', $range, 2);
+
+    foreach ($range as $key => $value) {
+      $value = (int)$value;
+      if (!$value) {
+        // If either value is "0", discard the range.
+        return null;
+      }
+      $range[$key] = $value;
+    }
+
+    // If the range is like "$10", treat it like "$10-10".
+    if (count($range) == 1) {
+      $range[] = head($range);
+    }
+
+    // If the range is "$7-5", treat it like "$5-7".
+    if ($range[1] < $range[0]) {
+      $range = array_reverse($range);
+    }
+
+    // If the user specified something like "$1-999999999" and we have a limit,
+    // clamp it to a more reasonable range.
+    if ($limit !== null) {
+      if ($range[1] - $range[0] > $limit) {
+        $range[1] = $range[0] + $limit;
+      }
+    }
+
+    return $range;
+  }
+
   public function setApplicationConfiguration(
     $application_configuration) {
     $this->applicationConfiguration = $application_configuration;
@@ -331,6 +383,15 @@ final class AphrontRequest extends Phobject {
     return $this->validateCSRF();
   }
 
+  public function hasCSRF() {
+    try {
+      $this->validateCSRF();
+      return true;
+    } catch (AphrontMalformedRequestException $ex) {
+      return false;
+    }
+  }
+
   public function isFormOrHisecPost() {
     $post = $this->getExists(self::TYPE_FORM) &&
             $this->isHTTPPost();
@@ -539,10 +600,11 @@ final class AphrontRequest extends Phobject {
   }
 
   public function getRequestURI() {
-    $get = $_GET;
-    unset($get['__path__']);
-    $path = phutil_escape_uri($this->getPath());
-    return id(new PhutilURI($path))->setQueryParams($get);
+    $uri_path = phutil_escape_uri($this->getPath());
+    $uri_query = idx($_SERVER, 'QUERY_STRING', '');
+
+    return id(new PhutilURI($uri_path.'?'.$uri_query))
+      ->removeQueryParam('__path__');
   }
 
   public function getAbsoluteRequestURI() {
@@ -601,7 +663,7 @@ final class AphrontRequest extends Phobject {
   }
 
   public function isContinueRequest() {
-    return $this->isFormPost() && $this->getStr('__continue__');
+    return $this->isFormOrHisecPost() && $this->getStr('__continue__');
   }
 
   public function isPreviewRequest() {
@@ -772,7 +834,10 @@ final class AphrontRequest extends Phobject {
     }
 
     $uri->setPath($this->getPath());
-    $uri->setQueryParams(self::flattenData($_GET));
+    $uri->removeAllQueryParams();
+    foreach (self::flattenData($_GET) as $query_key => $query_value) {
+      $uri->appendQueryParam($query_key, $query_value);
+    }
 
     $input = PhabricatorStartup::getRawInput();
 

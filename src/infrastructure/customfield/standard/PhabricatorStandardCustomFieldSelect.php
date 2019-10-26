@@ -148,4 +148,14 @@ final class PhabricatorStandardCustomFieldSelect
     return new ConduitStringParameterType();
   }
 
+  protected function newBulkParameterType() {
+    return id(new BulkSelectParameterType())
+      ->setOptions($this->getOptions());
+  }
+
+  protected function newExportFieldType() {
+    return id(new PhabricatorOptionExportField())
+      ->setOptions($this->getOptions());
+  }
+
 }

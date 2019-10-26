@@ -12,10 +12,31 @@ final class PhabricatorOwnersPackagePathsTransaction
 
   public function generateNewValue($object, $value) {
     $new = $value;
+
     foreach ($new as $key => $info) {
-      $new[$key]['excluded'] = (int)idx($info, 'excluded');
+      $info['excluded'] = (int)idx($info, 'excluded');
+
+      // The input has one "path" key with the display path.
+      // Move it to "display", then normalize the value in "path".
+
+      $display_path = $info['path'];
+      $raw_path = rtrim($display_path, '/').'/';
+
+      $info['path'] = $raw_path;
+      $info['display'] = $display_path;
+
+      $new[$key] = $info;
     }
+
     return $new;
+  }
+
+  public function getTransactionHasEffect($object, $old, $new) {
+    list($add, $rem) = PhabricatorOwnersPath::getTransactionValueChanges(
+      $old,
+      $new);
+
+    return ($add || $rem);
   }
 
   public function validateTransactions($object, array $xactions) {
@@ -103,6 +124,30 @@ final class PhabricatorOwnersPackagePathsTransaction
 
     $paths = $object->getPaths();
 
+    // We store paths in a normalized format with a trailing slash, regardless
+    // of whether the user enters "path/to/file.c" or "src/backend/". Normalize
+    // paths now.
+
+    $display_map = array();
+    $seen_map = array();
+    foreach ($new as $key => $spec) {
+      $raw_path = $spec['path'];
+      $display_path = $spec['display'];
+
+      // If the user entered two paths in the same repository which normalize
+      // to the same value (like "src/main.c" and "src/main.c/"), discard the
+      // duplicates.
+      $repository_phid = $spec['repositoryPHID'];
+      if (isset($seen_map[$repository_phid][$raw_path])) {
+        unset($new[$key]);
+        continue;
+      }
+
+      $new[$key]['path'] = $raw_path;
+      $display_map[$raw_path] = $display_path;
+      $seen_map[$repository_phid][$raw_path] = true;
+    }
+
     $diffs = PhabricatorOwnersPath::getTransactionValueChanges($old, $new);
     list($rem, $add) = $diffs;
 
@@ -111,12 +156,24 @@ final class PhabricatorOwnersPackagePathsTransaction
       $ref = $path->getRef();
       if (PhabricatorOwnersPath::isRefInSet($ref, $set)) {
         $path->delete();
+        continue;
+      }
+
+      // If the user has changed the display value for a path but the raw
+      // storage value hasn't changed, update the display value.
+
+      if (isset($display_map[$path->getPath()])) {
+        $path
+          ->setPathDisplay($display_map[$path->getPath()])
+          ->save();
+        continue;
       }
     }
 
     foreach ($add as $ref) {
       $path = PhabricatorOwnersPath::newFromRef($ref)
         ->setPackageID($object->getID())
+        ->setPathDisplay($display_map[$ref['path']])
         ->save();
     }
   }
@@ -157,11 +214,18 @@ final class PhabricatorOwnersPackagePathsTransaction
     $rowc = array();
     foreach ($rows as $key => $row) {
       $rowc[] = $row['class'];
+
+      if (array_key_exists('display', $row)) {
+        $display_path = $row['display'];
+      } else {
+        $display_path = $row['path'];
+      }
+
       $rows[$key] = array(
         $row['change'],
         $row['excluded'] ? pht('Exclude') : pht('Include'),
         $this->renderHandle($row['repositoryPHID']),
-        $row['path'],
+        $display_path,
       );
     }
 

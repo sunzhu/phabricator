@@ -6,20 +6,17 @@ final class ManiphestTaskPriorityTransaction
   const TRANSACTIONTYPE = 'priority';
 
   public function generateOldValue($object) {
-    if ($this->isNewObject()) {
-      return null;
-    }
-    return $object->getPriority();
+    return (string)$object->getPriority();
   }
 
   public function generateNewValue($object, $value) {
     // `$value` is supposed to be a keyword, but if the priority
     // assigned to a task has been removed from the config,
     // no such keyword will be available. Other edits to the task
-    // should still be allowed, even if the priority is  no longer
+    // should still be allowed, even if the priority is no longer
     // valid, so treat this as a no-op.
     if ($value === ManiphestTaskPriority::UNKNOWN_PRIORITY_KEYWORD) {
-      return $object->getPriority();
+      return (string)$object->getPriority();
     }
 
     return (string)ManiphestTaskPriority::getTaskPriorityFromKeyword($value);
@@ -30,7 +27,7 @@ final class ManiphestTaskPriorityTransaction
   }
 
   public function getActionStrength() {
-    return 1.1;
+    return 110;
   }
 
   public function getActionName() {
@@ -173,6 +170,35 @@ final class ManiphestTaskPriorityTransaction
     }
 
     return $errors;
+  }
+
+  public function getTransactionTypeForConduit($xaction) {
+    return 'priority';
+  }
+
+  public function getFieldValuesForConduit($xaction, $data) {
+    $old = $xaction->getOldValue();
+    if ($old !== null) {
+      $old = (int)$old;
+      $old_name = ManiphestTaskPriority::getTaskPriorityName($old);
+    } else {
+      $old_name = null;
+    }
+
+    $new = $xaction->getNewValue();
+    $new = (int)$new;
+    $new_name = ManiphestTaskPriority::getTaskPriorityName($new);
+
+    return array(
+      'old' => array(
+        'value' => $old,
+        'name' => $old_name,
+      ),
+      'new' => array(
+        'value' => $new,
+        'name' => $new_name,
+      ),
+    );
   }
 
 }

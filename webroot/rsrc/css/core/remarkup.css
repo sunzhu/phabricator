@@ -31,9 +31,10 @@
   font-size: 13px;
   font-weight: bold;
   background: rgba({$alphablue},0.08);
-  display: inline-block;
+  display: table-cell;
   border-top-left-radius: 3px;
   border-top-right-radius: 3px;
+  overflow: hidden;
 }
 
 .phabricator-remarkup .code-block-counterexample .remarkup-code-header {
@@ -173,40 +174,29 @@
   list-style-type: none;
 }
 
-.phabricator-remarkup h1.remarkup-header {
-  font-size: 24px;
-  line-height: 1.625em;
-  margin: 24px 0 4px;
-}
-
 .phabricator-remarkup h2.remarkup-header {
-  font-size: 20px;
-  line-height: 1.5em;
-  margin: 20px 0 4px;
+  font-size: 28px;
+  margin: 1em 0 0.75em;
 }
 
 .phabricator-remarkup h3.remarkup-header {
-  font-size: 18px;
-  line-height: 1.375em;
-  margin: 20px 0 4px;
+  font-size: 24px;
+  margin: 1em 0 0.75em;
 }
 
 .phabricator-remarkup h4.remarkup-header {
-  font-size: 16px;
-  line-height: 1.25em;
-  margin: 12px 0 4px;
+  font-size: 22px;
+  margin: 1em 0 0.75em;
 }
 
 .phabricator-remarkup h5.remarkup-header {
-  font-size: 15px;
-  line-height: 1.125em;
-  margin: 8px 0 4px;
+  font-size: 18px;
+  margin: 1em 0 0.75em;
 }
 
 .phabricator-remarkup h6.remarkup-header {
-  font-size: 14px;
-  line-height: 1em;
-  margin: 4px 0;
+  font-size: 16px;
+  margin: 1em 0 0.75em;
 }
 
 .phabricator-remarkup blockquote {
@@ -405,8 +395,9 @@ video.phabricator-media {
   color: {$blacktext};
   min-width: 256px;
   position: relative;
-  /*height: 22px;*/
   line-height: 20px;
+  overflow: hidden;
+  min-height: 38px;
 }
 
 .phabricator-remarkup-embed-layout-icon {
@@ -426,6 +417,9 @@ video.phabricator-media {
 .phabricator-remarkup-embed-layout-link:hover {
   border-color: {$violet};
   cursor: pointer;
+}
+
+.device-desktop .phabricator-remarkup-embed-layout-link:hover {
   text-decoration: none;
 }
 
@@ -470,6 +464,13 @@ video.phabricator-media {
 .phabricator-remarkup-embed-float-left {
   float: left;
   margin: .5em 1em 0;
+}
+
+.phabricator-remarkup-image-error {
+  border: 1px solid {$redborder};
+  background: {$sh-redbackground};
+  padding: 8px 12px;
+  color: {$darkgreytext};
 }
 
 .phabricator-remarkup-embed-image {
@@ -713,6 +714,11 @@ var.remarkup-assist-textarea {
   color: {$darkgreytext};
 }
 
+.phuix-autocomplete-list a.jx-result .tokenizer-result-closed {
+  color: {$lightgreytext};
+  text-decoration: line-through;
+}
+
 .phuix-autocomplete-list a.jx-result .phui-icon-view {
   margin-right: 4px;
   color: {$lightbluetext};
@@ -746,7 +752,7 @@ var.remarkup-assist-textarea {
   margin: 0;
 
   overflow: auto;
-  max-height: 40vh;
+  max-height: 60vh;
 }
 
 .remarkup-assist-pinned-spacer {

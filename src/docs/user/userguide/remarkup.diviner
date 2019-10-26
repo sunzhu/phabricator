@@ -366,7 +366,7 @@ can be found on the date stamp of any transaction/comment):
 
   T123#412       # Link to comment id #412 of task T123
 
-See the Phabricator configuraton setting `remarkup.ignored-object-names` to
+See the Phabricator configuration setting `remarkup.ignored-object-names` to
 modify this behavior.
 
 = Embedding Objects
@@ -530,7 +530,7 @@ This renders: {icon camera color=blue}
 
 For a list of available icons and colors, check the UIExamples application.
 (The icons are sourced from
-[[ http://fortawesome.github.io/Font-Awesome/ | FontAwesome ]], so you can also
+[[ https://fontawesome.com/v4.7.0/icons/ | FontAwesome ]], so you can also
 browse the collection there.)
 
 You can add `spin` to make the icon spin:
@@ -713,6 +713,18 @@ Press {key down down-right right LP} to activate the hadoken technique.
 
 > Use {key command option shift 3} to take a screenshot.
 > Press {key down down-right right LP} to activate the hadoken technique.
+
+
+Anchors
+========
+
+You can use `{anchor #xyz}` to create a document anchor and later link to
+it directly with `#xyz` in the URI.
+
+Headers also automatically create named anchors.
+
+If you navigate to `#xyz` in your browser location bar, the page will scroll
+to the first anchor with "xyz" as a prefix of the anchor name.
 
 
 = Fullscreen Mode =

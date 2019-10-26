@@ -52,6 +52,36 @@ final class DiffusionBrowseQueryConduitAPIMethod
           $commit,
           $path);
       } catch (CommandException $e) {
+        // The "cat-file" command may fail if the path legitimately does not
+        // exist, but it may also fail if the path is a submodule. This can
+        // produce either "Not a valid object name" or "could not get object
+        // info".
+
+        // To detect if we have a submodule, use `git ls-tree`. If the path
+        // is a submodule, we'll get a "160000" mode mask with type "commit".
+
+        list($sub_err, $sub_stdout) = $repository->execLocalCommand(
+          'ls-tree %s -- %s',
+          $commit,
+          $path);
+        if (!$sub_err) {
+          // If the path failed "cat-file" but "ls-tree" worked, we assume it
+          // must be a submodule. If it is, the output will look something
+          // like this:
+          //
+          //   160000 commit <hash> <path>
+          //
+          // We make sure it has the 160000 mode mask to confirm that it's
+          // definitely a submodule.
+          $mode = (int)$sub_stdout;
+          if ($mode & 160000) {
+            $submodule_reason = DiffusionBrowseResultSet::REASON_IS_SUBMODULE;
+            $result
+              ->setReasonForEmptyResultSet($submodule_reason);
+            return $result;
+          }
+        }
+
         $stderr = $e->getStderr();
         if (preg_match('/^fatal: Not a valid object name/', $stderr)) {
           // Grab two logs, since the first one is when the object was deleted.
@@ -338,9 +368,9 @@ final class DiffusionBrowseQueryConduitAPIMethod
     }
 
     if ($commit) {
-      $slice_clause = 'AND svnCommit <= '.(int)$commit;
+      $slice_clause = qsprintf($conn_r, 'AND svnCommit <= %d', $commit);
     } else {
-      $slice_clause = '';
+      $slice_clause = qsprintf($conn_r, '');
     }
 
     $index = queryfx_all(
@@ -409,9 +439,11 @@ final class DiffusionBrowseQueryConduitAPIMethod
 
     $sql = array();
     foreach ($index as $row) {
-      $sql[] =
-        '(pathID = '.(int)$row['pathID'].' AND '.
-        'svnCommit = '.(int)$row['maxCommit'].')';
+      $sql[] = qsprintf(
+        $conn_r,
+        '(pathID = %d AND svnCommit = %d)',
+        $row['pathID'],
+        $row['maxCommit']);
     }
 
     $browse = queryfx_all(
@@ -421,13 +453,13 @@ final class DiffusionBrowseQueryConduitAPIMethod
         WHERE repositoryID = %d
           AND parentID = %d
           AND existed = 1
-        AND (%Q)
+        AND (%LO)
         ORDER BY pathName',
       PhabricatorRepository::TABLE_FILESYSTEM,
       PhabricatorRepository::TABLE_PATH,
       $repository->getID(),
       $path_id,
-      implode(' OR ', $sql));
+      $sql);
 
     $loadable_commits = array();
     foreach ($browse as $key => $file) {

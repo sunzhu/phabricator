@@ -6,9 +6,8 @@
   color: #aa0066;
 }
 
-.remarkup-code .over-the-line {
-  color: #aa0066;
-  margin-right: 1px;
+.remarkup-code .language-tag {
+  color: {$lightgreytext};
 }
 
 .remarkup-code td > span {
@@ -24,15 +23,19 @@
 .remarkup-code .rbw_i { color: indigo; }
 .remarkup-code .rbw_v { color: violet; }
 
-.repository-crossreference .remarkup-code .crossreference-item {
-  background: lightyellow;
-  border-bottom: 1px dotted #bbddbb;
-}
-.crossreference-cursor {
+span.crossreference-item {
+  background: {$lightyellow};
+  border-bottom: 1px solid {$yellow};
   cursor: help;
 }
 
 .remarkup-code .invisible {
   color: #222222;
   background: #dddddd;
+}
+
+.suspicious-character {
+  background: #ff7700;
+  color: #ffffff;
+  cursor: default;
 }

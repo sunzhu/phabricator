@@ -24,9 +24,9 @@ final class DiffusionRepositorySubversionManagementPanel
     $has_any = (bool)$repository->getDetail('svn-subpath');
 
     if ($has_any) {
-      return 'fa-database';
+      return 'fa-folder';
     } else {
-      return 'fa-database grey';
+      return 'fa-folder grey';
     }
   }
 
@@ -39,7 +39,7 @@ final class DiffusionRepositorySubversionManagementPanel
   public function buildManagementPanelCurtain() {
     $repository = $this->getRepository();
     $viewer = $this->getViewer();
-    $action_list = $this->getNewActionList();
+    $action_list = $this->newActionList();
 
     $can_edit = PhabricatorPolicyFilter::hasCapability(
       $viewer,
@@ -56,7 +56,8 @@ final class DiffusionRepositorySubversionManagementPanel
         ->setDisabled(!$can_edit)
         ->setWorkflow(!$can_edit));
 
-    return $this->getNewCurtainView($action_list);
+    return $this->newCurtainView($action_list)
+      ->setActionList($action_list);
   }
 
   public function buildManagementPanelContent() {
@@ -67,10 +68,9 @@ final class DiffusionRepositorySubversionManagementPanel
       ->setViewer($viewer);
 
     $default_branch = nonempty(
-      $repository->getHumanReadableDetail('svn-subpath'),
+      $repository->getDetail('svn-subpath'),
       phutil_tag('em', array(), pht('Import Entire Repository')));
     $view->addProperty(pht('Import Only'), $default_branch);
-
 
     return $this->newBox(pht('Subversion'), $view);
   }

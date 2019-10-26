@@ -6,7 +6,9 @@ final class PhabricatorConfigManagementSetWorkflow
   protected function didConstruct() {
     $this
       ->setName('set')
-      ->setExamples('**set** __key__ __value__')
+      ->setExamples(
+        "**set** __key__ __value__\n".
+        "**set** __key__ --stdin < value.json")
       ->setSynopsis(pht('Set a local configuration value.'))
       ->setArguments(
         array(
@@ -17,6 +19,10 @@ final class PhabricatorConfigManagementSetWorkflow
               'in local configuration.'),
           ),
           array(
+            'name' => 'stdin',
+            'help' => pht('Read option value from stdin.'),
+          ),
+          array(
             'name'      => 'args',
             'wildcard'  => true,
           ),
@@ -24,37 +30,51 @@ final class PhabricatorConfigManagementSetWorkflow
   }
 
   public function execute(PhutilArgumentParser $args) {
-    $console = PhutilConsole::getConsole();
     $argv = $args->getArg('args');
-    if (count($argv) == 0) {
+    if (!$argv) {
       throw new PhutilArgumentUsageException(
-        pht('Specify a configuration key and a value to set it to.'));
+        pht('Specify the configuration key you want to set.'));
     }
+
+    $is_stdin = $args->getArg('stdin');
 
     $key = $argv[0];
 
-    if (count($argv) == 1) {
-      throw new PhutilArgumentUsageException(
-        pht(
-          "Specify a value to set the key '%s' to.",
-          $key));
-    }
+    if ($is_stdin) {
+      if (count($argv) > 1) {
+        throw new PhutilArgumentUsageException(
+          pht(
+            'Too many arguments: expected only a configuration key when '.
+            'using "--stdin".'));
+      }
 
-    $value = $argv[1];
+      fprintf(STDERR, tsprintf("%s\n", pht('Reading value from stdin...')));
+      $value = file_get_contents('php://stdin');
+    } else {
+      if (count($argv) == 1) {
+        throw new PhutilArgumentUsageException(
+          pht(
+            'Specify a value to set the configuration key "%s" to, or '.
+            'use "--stdin" to read a value from stdin.',
+            $key));
+      }
 
-    if (count($argv) > 2) {
-      throw new PhutilArgumentUsageException(
-        pht(
-          'Too many arguments: expected one key and one value.'));
+      if (count($argv) > 2) {
+        throw new PhutilArgumentUsageException(
+          pht(
+            'Too many arguments: expected one key and one value.'));
+      }
+
+      $value = $argv[1];
     }
 
     $options = PhabricatorApplicationConfigOptions::loadAllOptions();
     if (empty($options[$key])) {
       throw new PhutilArgumentUsageException(
         pht(
-          "No such configuration key '%s'! Use `%s` to list all keys.",
-          $key,
-          'config list'));
+          'Configuration key "%s" is unknown. Use "bin/config list" to list '.
+          'all known keys.',
+          $key));
     }
 
     $option = $options[$key];
@@ -79,7 +99,7 @@ final class PhabricatorConfigManagementSetWorkflow
             switch ($type) {
               default:
                 $message = pht(
-                  'Config key "%s" is of type "%s". Specify it in JSON.',
+                  'Configuration key "%s" is of type "%s". Specify it in JSON.',
                   $key,
                   $type);
                 break;
@@ -108,7 +128,6 @@ final class PhabricatorConfigManagementSetWorkflow
     }
 
     if ($use_database) {
-      $config_type = 'database';
       $config_entry = PhabricatorConfigEntry::loadConfigEntry($key);
       $config_entry->setValue($value);
 
@@ -116,15 +135,37 @@ final class PhabricatorConfigManagementSetWorkflow
       $config_entry->setIsDeleted(0);
 
       $config_entry->save();
+
+      $write_message = pht(
+        'Wrote configuration key "%s" to database storage.',
+        $key);
     } else {
-      $config_type = 'local';
-      id(new PhabricatorConfigLocalSource())
-        ->setKeys(array($key => $value));
+      $config_source = new PhabricatorConfigLocalSource();
+
+      $local_path = $config_source->getReadablePath();
+
+      try {
+        $config_source->setKeys(array($key => $value));
+      } catch (FilesystemException $ex) {
+        throw new PhutilArgumentUsageException(
+          pht(
+            'Local path "%s" is not writable. This file must be writable '.
+            'so that "bin/config" can store configuration.',
+            Filesystem::readablePath($local_path)));
+      }
+
+      $write_message = pht(
+        'Wrote configuration key "%s" to local storage (in file "%s").',
+        $key,
+        $local_path);
     }
 
-    $console->writeOut(
-      "%s\n",
-      pht("Set '%s' in %s configuration.", $key, $config_type));
+    echo tsprintf(
+      "<bg:green>** %s **</bg> %s\n",
+      pht('DONE'),
+      $write_message);
+
+    return 0;
   }
 
 }

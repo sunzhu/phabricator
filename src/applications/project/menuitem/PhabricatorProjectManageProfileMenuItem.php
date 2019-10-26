@@ -13,9 +13,18 @@ final class PhabricatorProjectManageProfileMenuItem
     return pht('Manage');
   }
 
+  public function getMenuItemTypeIcon() {
+    return 'fa-cog';
+  }
+
   public function canHideMenuItem(
     PhabricatorProfileMenuItemConfiguration $config) {
     return false;
+  }
+
+  public function canMakeDefault(
+    PhabricatorProfileMenuItemConfiguration $config) {
+    return true;
   }
 
   public function getDisplayName(
@@ -40,7 +49,7 @@ final class PhabricatorProjectManageProfileMenuItem
     );
   }
 
-  protected function newNavigationMenuItems(
+  protected function newMenuItemViewList(
     PhabricatorProfileMenuItemConfiguration $config) {
 
     $project = $config->getProfileObject();
@@ -49,10 +58,10 @@ final class PhabricatorProjectManageProfileMenuItem
 
     $name = $this->getDisplayName($config);
     $icon = 'fa-gears';
-    $href = "/project/manage/{$id}/";
+    $uri = "/project/manage/{$id}/";
 
-    $item = $this->newItem()
-      ->setHref($href)
+    $item = $this->newItemView()
+      ->setURI($uri)
       ->setName($name)
       ->setIcon($icon);
 

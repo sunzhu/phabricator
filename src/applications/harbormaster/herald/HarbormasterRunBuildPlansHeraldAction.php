@@ -7,6 +7,12 @@ final class HarbormasterRunBuildPlansHeraldAction
 
   const ACTIONCONST = 'harbormaster.build';
 
+  public function getRequiredAdapterStates() {
+    return array(
+      HeraldBuildableState::STATECONST,
+    );
+  }
+
   public function getActionGroupKey() {
     return HeraldSupportActionGroup::ACTIONGROUPKEY;
   }
@@ -85,4 +91,13 @@ final class HarbormasterRunBuildPlansHeraldAction
       'Run build plans: %s.',
       $this->renderHandleList($value));
   }
+
+  public function getPHIDsAffectedByAction(HeraldActionRecord $record) {
+    return $record->getTarget();
+  }
+
+  public function isActionAvailable() {
+    return id(new PhabricatorHarbormasterApplication())->isInstalled();
+  }
+
 }

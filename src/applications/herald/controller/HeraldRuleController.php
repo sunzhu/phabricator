@@ -218,7 +218,7 @@ final class HeraldRuleController extends HeraldController {
             ),
             pht('New Action')))
           ->setDescription(pht(
-            'Take these actions %s this rule matches:',
+            'Take these actions %s',
             $repetition_selector))
           ->setContent(javelin_tag(
               'table',
@@ -238,9 +238,9 @@ final class HeraldRuleController extends HeraldController {
         ? pht('Edit Herald Rule: %s', $rule->getName())
         : pht('Create Herald Rule: %s', idx($content_type_map, $content_type));
 
-    $icon = $rule->getID() ? 'fa-pencil' : 'fa-plus-square';
-
     $form_box = id(new PHUIObjectBoxView())
+      ->setHeaderText($title)
+      ->setBackground(PHUIObjectBoxView::WHITE_CONFIG)
       ->setFormErrors($errors)
       ->setForm($form);
 
@@ -249,12 +249,7 @@ final class HeraldRuleController extends HeraldController {
       ->addTextCrumb($title)
       ->setBorder(true);
 
-    $header = id(new PHUIHeaderView())
-      ->setHeader($title)
-      ->setHeaderIcon('fa-plus-square');
-
     $view = id(new PHUITwoColumnView())
-      ->setHeader($header)
       ->setFooter($form_box);
 
     return $this->newPage()
@@ -270,7 +265,15 @@ final class HeraldRuleController extends HeraldController {
     $new_name = $request->getStr('name');
     $match_all = ($request->getStr('must_match') == 'all');
 
-    $repetition_policy_param = $request->getStr('repetition_policy');
+    $repetition_policy = $request->getStr('repetition_policy');
+
+    // If the user selected an invalid policy, or there's only one possible
+    // value so we didn't render a control, adjust the value to the first
+    // valid policy value.
+    $repetition_options = $this->getRepetitionOptionMap($adapter);
+    if (!isset($repetition_options[$repetition_policy])) {
+      $repetition_policy = head_key($repetition_options);
+    }
 
     $e_name = true;
     $errors = array();
@@ -353,14 +356,24 @@ final class HeraldRuleController extends HeraldController {
         $match_all,
         $conditions,
         $actions,
-        $repetition_policy_param);
+        $repetition_policy);
 
       $xactions = array();
+
+      // Until this moves to EditEngine, manually add a "CREATE" transaction
+      // if we're creating a new rule. This improves rendering of the initial
+      // group of transactions.
+      $is_new = (bool)(!$rule->getID());
+      if ($is_new) {
+        $xactions[] = id(new HeraldRuleTransaction())
+          ->setTransactionType(PhabricatorTransactions::TYPE_CREATE);
+      }
+
       $xactions[] = id(new HeraldRuleTransaction())
-        ->setTransactionType(HeraldRuleTransaction::TYPE_EDIT)
+        ->setTransactionType(HeraldRuleEditTransaction::TRANSACTIONTYPE)
         ->setNewValue($new_state);
       $xactions[] = id(new HeraldRuleTransaction())
-        ->setTransactionType(HeraldRuleTransaction::TYPE_NAME)
+        ->setTransactionType(HeraldRuleNameTransaction::TRANSACTIONTYPE)
         ->setNewValue($new_name);
 
       try {
@@ -378,8 +391,7 @@ final class HeraldRuleController extends HeraldController {
     // mutate current rule, so it would be sent to the client in the right state
     $rule->setMustMatchAll((int)$match_all);
     $rule->setName($new_name);
-    $rule->setRepetitionPolicy(
-      HeraldRepetitionPolicyConfig::toInt($repetition_policy_param));
+    $rule->setRepetitionPolicyStringConstant($repetition_policy);
     $rule->attachConditions($conditions);
     $rule->attachActions($actions);
 
@@ -392,8 +404,8 @@ final class HeraldRuleController extends HeraldController {
     HeraldAdapter $adapter) {
 
     $all_rules = $this->loadRulesThisRuleMayDependUpon($rule);
-    $all_rules = mpull($all_rules, 'getName', 'getPHID');
-    asort($all_rules);
+    $all_rules = msortv($all_rules, 'getEditorSortVector');
+    $all_rules = mpull($all_rules, 'getEditorDisplayName', 'getPHID');
 
     $all_fields = $adapter->getFieldNameMap();
     $all_conditions = $adapter->getConditionNameMap();
@@ -599,15 +611,10 @@ final class HeraldRuleController extends HeraldController {
    * time) this rule matches..." element.
    */
   private function renderRepetitionSelector($rule, HeraldAdapter $adapter) {
-    $repetition_policy = HeraldRepetitionPolicyConfig::toString(
-      $rule->getRepetitionPolicy());
-
-    $repetition_options = $adapter->getRepetitionOptions();
-    $repetition_names = HeraldRepetitionPolicyConfig::getMap();
-    $repetition_map = array_select_keys($repetition_names, $repetition_options);
-
+    $repetition_policy = $rule->getRepetitionPolicyStringConstant();
+    $repetition_map = $this->getRepetitionOptionMap($adapter);
     if (count($repetition_map) < 2) {
-      return head($repetition_names);
+      return head($repetition_map);
     } else {
       return AphrontFormSelectControl::renderSelectTag(
         $repetition_policy,
@@ -618,6 +625,11 @@ final class HeraldRuleController extends HeraldController {
     }
   }
 
+  private function getRepetitionOptionMap(HeraldAdapter $adapter) {
+    $repetition_options = $adapter->getRepetitionOptions();
+    $repetition_names = HeraldRule::getRepetitionPolicySelectOptionMap();
+    return array_select_keys($repetition_names, $repetition_options);
+  }
 
   protected function buildTokenizerTemplates() {
     $template = new AphrontTokenizerTemplateView();
@@ -662,15 +674,6 @@ final class HeraldRuleController extends HeraldController {
         ->execute();
     }
 
-    // mark disabled rules as disabled since they are not useful as such;
-    // don't filter though to keep edit cases sane / expected
-    foreach ($all_rules as $current_rule) {
-      if ($current_rule->getIsDisabled()) {
-        $current_rule->makeEphemeral();
-        $current_rule->setName($rule->getName().' '.pht('(Disabled)'));
-      }
-    }
-
     // A rule can not depend upon itself.
     unset($all_rules[$rule->getID()]);
 
@@ -681,7 +684,10 @@ final class HeraldRuleController extends HeraldController {
     $group_map = array();
     foreach ($field_map as $field_key => $field_name) {
       $group_key = $adapter->getFieldGroupKey($field_key);
-      $group_map[$group_key][$field_key] = $field_name;
+      $group_map[$group_key][$field_key] = array(
+        'name' => $field_name,
+        'available' => $adapter->isFieldAvailable($field_key),
+      );
     }
 
     return $this->getGroups(
@@ -693,7 +699,10 @@ final class HeraldRuleController extends HeraldController {
     $group_map = array();
     foreach ($action_map as $action_key => $action_name) {
       $group_key = $adapter->getActionGroupKey($action_key);
-      $group_map[$group_key][$action_key] = $action_name;
+      $group_map[$group_key][$action_key] = array(
+        'name' => $action_name,
+        'available' => $adapter->isActionAvailable($action_key),
+      );
     }
 
     return $this->getGroups(

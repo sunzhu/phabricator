@@ -23,12 +23,16 @@ final class DiffusionMercurialWireProtocol extends Phobject {
       'listkeys' => array('namespace'),
       'lookup' => array('key'),
       'pushkey' => array('namespace', 'key', 'old', 'new'),
+      'protocaps' => array('caps'),
       'stream_out' => array(''),
       'unbundle' => array('heads'),
     );
 
     if (!isset($commands[$command])) {
-      throw new Exception(pht("Unknown Mercurial command '%s!", $command));
+      throw new Exception(
+        pht(
+          'Unknown Mercurial command "%s"!',
+          $command));
     }
 
     return $commands[$command];
@@ -49,6 +53,7 @@ final class DiffusionMercurialWireProtocol extends Phobject {
       'known' => true,
       'listkeys' => true,
       'lookup' => true,
+      'protocaps' => true,
       'stream_out' => true,
     );
 
@@ -101,7 +106,7 @@ final class DiffusionMercurialWireProtocol extends Phobject {
 
   /** If the server version is running 3.4+ it will respond
    * with 'bundle2' capability in the format of "bundle2=(url-encoding)".
-   * Until we maange to properly package up bundles to send back we
+   * Until we manage to properly package up bundles to send back we
    * disallow the client from knowing we speak bundle2 by removing it
    * from the capabilities listing.
    *

@@ -37,6 +37,38 @@ final class PhabricatorCoreConfigOptions
     $proto_doc_name = pht('User Guide: Prototype Applications');
     $applications_app_href = '/applications/';
 
+    $silent_description = $this->deformat(pht(<<<EOREMARKUP
+This option allows you to stop Phabricator from sending data to most external
+services: it will disable email, SMS, repository mirroring, remote builds,
+Doorkeeper writes, and webhooks.
+
+This option is intended to allow a Phabricator instance to be exported, copied,
+imported, and run in a test environment without impacting users. For example,
+if you are migrating to new hardware, you could perform a test migration first
+with this flag set, make sure things work, and then do a production cutover
+later with higher confidence and less disruption.
+
+Without making use of this flag to silence the temporary test environment,
+users would receive duplicate email during the time the test instance and old
+production instance were both in operation.
+EOREMARKUP
+      ));
+
+    $timezone_description = $this->deformat(pht(<<<EOREMARKUP
+PHP date functions will emit a warning if they are called when no default
+server timezone is configured.
+
+Usually, you configure a default timezone in `php.ini` by setting the
+configuration value `date.timezone`.
+
+If you prefer, you can configure a default timezone here instead. To configure
+a default timezone, select a timezone from the
+[[ %s | PHP List of Supported Timezones ]].
+EOREMARKUP
+,
+      'https://php.net/manual/timezones.php'));
+
+
     return array(
       $this->newOption('phabricator.base-uri', 'string', null)
         ->setLocked(true)
@@ -78,14 +110,7 @@ final class PhabricatorCoreConfigOptions
       $this->newOption('phabricator.timezone', 'string', null)
         ->setSummary(
           pht('The timezone Phabricator should use.'))
-        ->setDescription(
-          pht(
-            "PHP requires that you set a timezone in your php.ini before ".
-            "using date functions, or it will emit a warning. If this isn't ".
-            "possible (for instance, because you are using HPHP) you can set ".
-            "some valid constant for %s here and Phabricator will set it on ".
-            "your behalf, silencing the warning.",
-            'date_default_timezone_set()'))
+        ->setDescription($timezone_description)
         ->addExample('America/New_York', pht('US East (EDT)'))
         ->addExample('America/Chicago', pht('US Central (CDT)'))
         ->addExample('America/Boise', pht('US Mountain (MDT)'))
@@ -216,14 +241,6 @@ final class PhabricatorCoreConfigOptions
       $this->newOption('phabricator.cache-namespace', 'string', 'phabricator')
         ->setLocked(true)
         ->setDescription(pht('Cache namespace.')),
-      $this->newOption('phabricator.allow-email-users', 'bool', false)
-        ->setBoolOptions(
-          array(
-            pht('Allow'),
-            pht('Disallow'),
-          ))
-        ->setDescription(
-           pht('Allow non-members to interact with tasks over email.')),
       $this->newOption('phabricator.silent', 'bool', false)
         ->setLocked(true)
         ->setBoolOptions(
@@ -232,21 +249,7 @@ final class PhabricatorCoreConfigOptions
             pht('Run Normally'),
           ))
         ->setSummary(pht('Stop Phabricator from sending any email, etc.'))
-        ->setDescription(
-          pht(
-            'This option allows you to stop Phabricator from sending '.
-            'any data to external services. Among other things, it will '.
-            'disable email, SMS, repository mirroring, and HTTP hooks.'.
-            "\n\n".
-            'This option is intended to allow a Phabricator instance to '.
-            'be exported, copied, imported, and run in a test environment '.
-            'without impacting users. For example, if you are migrating '.
-            'to new hardware, you could perform a test migration first, '.
-            'make sure things work, and then do a production cutover '.
-            'later with higher confidence and less disruption. Without '.
-            'this flag, users would receive duplicate email during the '.
-            'time the test instance and old production instance were '.
-            'both in operation.')),
+        ->setDescription($silent_description),
       );
 
   }
@@ -264,24 +267,24 @@ final class PhabricatorCoreConfigOptions
       if ($protocol !== 'http' && $protocol !== 'https') {
         throw new PhabricatorConfigValidationException(
           pht(
-            "Config option '%s' is invalid. The URI must start with ".
-            "%s' or '%s'.",
+            'Config option "%s" is invalid. The URI must start with '.
+            '"%s" or "%s".',
+            $key,
             'http://',
-            'https://',
-            $key));
+            'https://'));
       }
 
       $domain = $uri->getDomain();
       if (strpos($domain, '.') === false) {
         throw new PhabricatorConfigValidationException(
           pht(
-            "Config option '%s' is invalid. The URI must contain a dot ".
-            "('%s'), like '%s', not just a bare name like '%s'. Some web ".
-            "browsers will not set cookies on domains with no TLD.",
+            'Config option "%s" is invalid. The URI must contain a dot '.
+            '("%s"), like "%s", not just a bare name like "%s". Some web '.
+            'browsers will not set cookies on domains with no TLD.',
+            $key,
             '.',
             'http://example.com/',
-            'http://example/',
-            $key));
+            'http://example/'));
       }
 
       $path = $uri->getPath();
@@ -306,12 +309,10 @@ final class PhabricatorCoreConfigOptions
       if (!$ok) {
         throw new PhabricatorConfigValidationException(
           pht(
-            "Config option '%s' is invalid. The timezone identifier must ".
-            "be a valid timezone identifier recognized by PHP, like '%s'. "."
-            You can find a list of valid identifiers here: %s",
+            'Config option "%s" is invalid. The timezone identifier must '.
+            'be a valid timezone identifier recognized by PHP, like "%s".',
             $key,
-            'America/Los_Angeles',
-            'http://php.net/manual/timezones.php'));
+            'America/Los_Angeles'));
       }
     }
   }

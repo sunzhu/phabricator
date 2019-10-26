@@ -5,7 +5,7 @@ abstract class DiffusionSSHWorkflow extends PhabricatorSSHWorkflow {
   private $args;
   private $repository;
   private $hasWriteAccess;
-  private $proxyURI;
+  private $shouldProxy;
   private $baseRequestPath;
 
   public function getRepository() {
@@ -26,9 +26,14 @@ abstract class DiffusionSSHWorkflow extends PhabricatorSSHWorkflow {
 
   public function getEnvironment() {
     $env = array(
-      DiffusionCommitHookEngine::ENV_USER => $this->getUser()->getUsername(),
+      DiffusionCommitHookEngine::ENV_USER => $this->getSSHUser()->getUsername(),
       DiffusionCommitHookEngine::ENV_REMOTE_PROTOCOL => 'ssh',
     );
+
+    $identifier = $this->getRequestIdentifier();
+    if ($identifier !== null) {
+      $env[DiffusionCommitHookEngine::ENV_REQUEST] = $identifier;
+    }
 
     $remote_address = $this->getSSHRemoteAddress();
     if ($remote_address !== null) {
@@ -64,18 +69,48 @@ abstract class DiffusionSSHWorkflow extends PhabricatorSSHWorkflow {
     return php_uname('n');
   }
 
-  protected function getTargetDeviceName() {
-    // TODO: This should use the correct device identity.
-    $uri = new PhutilURI($this->proxyURI);
-    return $uri->getDomain();
-  }
-
   protected function shouldProxy() {
-    return (bool)$this->proxyURI;
+    return $this->shouldProxy;
   }
 
-  protected function getProxyCommand() {
-    $uri = new PhutilURI($this->proxyURI);
+  final protected function getAlmanacServiceRefs($for_write) {
+    $viewer = $this->getSSHUser();
+    $repository = $this->getRepository();
+
+    $is_cluster_request = $this->getIsClusterRequest();
+
+    $refs = $repository->getAlmanacServiceRefs(
+      $viewer,
+      array(
+        'neverProxy' => $is_cluster_request,
+        'protocols' => array(
+          'ssh',
+        ),
+        'writable' => $for_write,
+      ));
+
+    if (!$refs) {
+      throw new Exception(
+        pht(
+          'Failed to generate an intracluster proxy URI even though this '.
+          'request was routed as a proxy request.'));
+    }
+
+    return $refs;
+  }
+
+  final protected function getProxyCommand($for_write) {
+    $refs = $this->getAlmanacServiceRefs($for_write);
+
+    $ref = head($refs);
+
+    return $this->getProxyCommandForServiceRef($ref);
+  }
+
+  final protected function getProxyCommandForServiceRef(
+    DiffusionServiceRef $ref) {
+
+    $uri = new PhutilURI($ref->getURI());
 
     $username = AlmanacKeys::getClusterSSHUser();
     if ($username === null) {
@@ -106,9 +141,9 @@ abstract class DiffusionSSHWorkflow extends PhabricatorSSHWorkflow {
     // This is suppressing "added <address> to the list of known hosts"
     // messages, which are confusing and irrelevant when they arise from
     // proxied requests. It might also be suppressing lots of useful errors,
-    // of course. Ideally, we would enforce host keys eventually.
+    // of course. Ideally, we would enforce host keys eventually. See T13121.
     $options[] = '-o';
-    $options[] = 'LogLevel=quiet';
+    $options[] = 'LogLevel=ERROR';
 
     // NOTE: We prefix the command with "@username", which the far end of the
     // connection will parse in order to act as the specified user. This
@@ -122,14 +157,14 @@ abstract class DiffusionSSHWorkflow extends PhabricatorSSHWorkflow {
       $key_path,
       $port,
       $host,
-      '@'.$this->getUser()->getUsername(),
+      '@'.$this->getSSHUser()->getUsername(),
       $this->getOriginalArguments());
   }
 
   final public function execute(PhutilArgumentParser $args) {
     $this->args = $args;
 
-    $viewer = $this->getUser();
+    $viewer = $this->getSSHUser();
     $have_diffusion = PhabricatorApplication::isClassInstalledForViewer(
       'PhabricatorDiffusionApplication',
       $viewer);
@@ -143,17 +178,25 @@ abstract class DiffusionSSHWorkflow extends PhabricatorSSHWorkflow {
     $repository = $this->identifyRepository();
     $this->setRepository($repository);
 
+    // NOTE: Here, we're just figuring out if this is a proxyable request to
+    // a clusterized repository or not. We don't (and can't) use the URI we get
+    // back directly.
+
+    // For example, we may get a read-only URI here but be handling a write
+    // request. We only care if we get back `null` (which means we should
+    // handle the request locally) or anything else (which means we should
+    // proxy it to an appropriate device).
+
     $is_cluster_request = $this->getIsClusterRequest();
     $uri = $repository->getAlmanacServiceURI(
       $viewer,
-      $is_cluster_request,
       array(
-        'ssh',
+        'neverProxy' => $is_cluster_request,
+        'protocols' => array(
+          'ssh',
+        ),
       ));
-
-    if ($uri) {
-      $this->proxyURI = $uri;
-    }
+    $this->shouldProxy = (bool)$uri;
 
     try {
       return $this->executeRepositoryOperations();
@@ -164,7 +207,7 @@ abstract class DiffusionSSHWorkflow extends PhabricatorSSHWorkflow {
   }
 
   protected function loadRepositoryWithPath($path, $vcs) {
-    $viewer = $this->getUser();
+    $viewer = $this->getSSHUser();
 
     $info = PhabricatorRepository::parseRepositoryServicePath($path, $vcs);
     if ($info === null) {
@@ -193,8 +236,10 @@ abstract class DiffusionSSHWorkflow extends PhabricatorSSHWorkflow {
         pht('No repository "%s" exists!', $identifier));
     }
 
+    $is_cluster = $this->getIsClusterRequest();
+
     $protocol = PhabricatorRepositoryURI::BUILTIN_PROTOCOL_SSH;
-    if (!$repository->canServeProtocol($protocol, false)) {
+    if (!$repository->canServeProtocol($protocol, false, $is_cluster)) {
       throw new Exception(
         pht(
           'This repository ("%s") is not available over SSH.',
@@ -214,7 +259,7 @@ abstract class DiffusionSSHWorkflow extends PhabricatorSSHWorkflow {
     }
 
     $repository = $this->getRepository();
-    $viewer = $this->getUser();
+    $viewer = $this->getSSHUser();
 
     if ($viewer->isOmnipotent()) {
       throw new Exception(
@@ -222,6 +267,10 @@ abstract class DiffusionSSHWorkflow extends PhabricatorSSHWorkflow {
           'This request is authenticated as a cluster device, but is '.
           'performing a write. Writes must be performed with a real '.
           'user account.'));
+    }
+
+    if ($repository->isReadOnly()) {
+      throw new Exception($repository->getReadOnlyMessageForDisplay());
     }
 
     $protocol = PhabricatorRepositoryURI::BUILTIN_PROTOCOL_SSH;
@@ -252,7 +301,7 @@ abstract class DiffusionSSHWorkflow extends PhabricatorSSHWorkflow {
   }
 
   protected function shouldSkipReadSynchronization() {
-    $viewer = $this->getUser();
+    $viewer = $this->getSSHUser();
 
     // Currently, the only case where devices interact over SSH without
     // assuming user credentials is when synchronizing before a read. These
@@ -265,14 +314,14 @@ abstract class DiffusionSSHWorkflow extends PhabricatorSSHWorkflow {
   }
 
   protected function newPullEvent() {
-    $viewer = $this->getViewer();
+    $viewer = $this->getSSHUser();
     $repository = $this->getRepository();
     $remote_address = $this->getSSHRemoteAddress();
 
     return id(new PhabricatorRepositoryPullEvent())
       ->setEpoch(PhabricatorTime::getNow())
       ->setRemoteAddress($remote_address)
-      ->setRemoteProtocol('ssh')
+      ->setRemoteProtocol(PhabricatorRepositoryPullEvent::PROTOCOL_SSH)
       ->setPullerPHID($viewer->getPHID())
       ->setRepositoryPHID($repository->getPHID());
   }

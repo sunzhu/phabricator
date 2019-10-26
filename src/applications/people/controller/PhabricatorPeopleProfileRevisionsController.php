@@ -32,8 +32,9 @@ final class PhabricatorPeopleProfileRevisionsController
     $crumbs->addTextCrumb(pht('Recent Revisions'));
     $crumbs->setBorder(true);
 
-    $nav = $this->getProfileMenu();
-    $nav->selectFilter(PhabricatorPeopleProfileMenuEngine::ITEM_REVISIONS);
+    $nav = $this->newNavigation(
+      $user,
+      PhabricatorPeopleProfileMenuEngine::ITEM_REVISIONS);
 
     $view = id(new PHUITwoColumnView())
       ->setHeader($header)
@@ -63,14 +64,10 @@ final class PhabricatorPeopleProfileRevisionsController
       ->execute();
 
     $list = id(new DifferentialRevisionListView())
-      ->setUser($viewer)
+      ->setViewer($viewer)
       ->setNoBox(true)
       ->setRevisions($revisions)
       ->setNoDataString(pht('No recent revisions.'));
-
-    $object_phids = $list->getRequiredHandlePHIDs();
-    $handles = $this->loadViewerHandles($object_phids);
-    $list->setHandles($handles);
 
     $view = id(new PHUIObjectBoxView())
       ->setHeaderText(pht('Recent Revisions'))

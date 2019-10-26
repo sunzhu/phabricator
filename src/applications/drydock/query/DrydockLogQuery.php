@@ -2,9 +2,16 @@
 
 final class DrydockLogQuery extends DrydockQuery {
 
+  private $ids;
   private $blueprintPHIDs;
   private $resourcePHIDs;
   private $leasePHIDs;
+  private $operationPHIDs;
+
+  public function withIDs(array $ids) {
+    $this->ids = $ids;
+    return $this;
+  }
 
   public function withBlueprintPHIDs(array $phids) {
     $this->blueprintPHIDs = $phids;
@@ -18,6 +25,11 @@ final class DrydockLogQuery extends DrydockQuery {
 
   public function withLeasePHIDs(array $phids) {
     $this->leasePHIDs = $phids;
+    return $this;
+  }
+
+  public function withOperationPHIDs(array $phids) {
+    $this->operationPHIDs = $phids;
     return $this;
   }
 
@@ -93,11 +105,39 @@ final class DrydockLogQuery extends DrydockQuery {
       $log->attachLease($lease);
     }
 
+    $operation_phids = array_filter(mpull($logs, 'getOperationPHID'));
+    if ($operation_phids) {
+      $operations = id(new DrydockRepositoryOperationQuery())
+        ->setParentQuery($this)
+        ->setViewer($this->getViewer())
+        ->withPHIDs($operation_phids)
+        ->execute();
+      $operations = mpull($operations, null, 'getPHID');
+    } else {
+      $operations = array();
+    }
+
+    foreach ($logs as $key => $log) {
+      $operation = null;
+      $operation_phid = $log->getOperationPHID();
+      if ($operation_phid) {
+        $operation = idx($operations, $operation_phid);
+      }
+      $log->attachOperation($operation);
+    }
+
     return $logs;
   }
 
   protected function buildWhereClauseParts(AphrontDatabaseConnection $conn) {
     $where = parent::buildWhereClauseParts($conn);
+
+    if ($this->ids !== null) {
+      $where[] = qsprintf(
+        $conn,
+        'id IN (%Ls)',
+        $this->ids);
+    }
 
     if ($this->blueprintPHIDs !== null) {
       $where[] = qsprintf(
@@ -118,6 +158,13 @@ final class DrydockLogQuery extends DrydockQuery {
         $conn,
         'leasePHID IN (%Ls)',
         $this->leasePHIDs);
+    }
+
+    if ($this->operationPHIDs !== null) {
+      $where[] = qsprintf(
+        $conn,
+        'operationPHID IN (%Ls)',
+        $this->operationPHIDs);
     }
 
     return $where;

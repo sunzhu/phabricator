@@ -123,22 +123,23 @@ information about the move, including an optional specific position within the
 column.
 
 The target column should be identified as `columnPHID`, and you may select a
-position by passing either `beforePHID` or `afterPHID`, specifying the PHID of
-a task currently in the column that you want to move this task before or after:
+position by passing either `beforePHIDs` or `afterPHIDs`, specifying the PHIDs
+of tasks currently in the column that you want to move this task before or
+after:
 
 ```lang=json
 [
   {
     "columnPHID": "PHID-PCOL-4444",
-    "beforePHID": "PHID-TASK-5555"
+    "beforePHIDs": ["PHID-TASK-5555"]
   }
 ]
 ```
 
-Note that this affects only the "natural" position of the task. The task
-position when the board is sorted by some other attribute (like priority)
-depends on that attribute value: change a task's priority to move it on
-priority-sorted boards.
+When you specify multiple PHIDs, the task will be moved adjacent to the first
+valid PHID found in either of the lists. This allows positional moves to
+generally work as users expect even if the client view of the board has fallen
+out of date and some of the nearby tasks have moved elsewhere.
 EODOCS
       );
 
@@ -178,6 +179,7 @@ EODOCS
       id(new PhabricatorTextEditField())
         ->setKey('title')
         ->setLabel(pht('Title'))
+        ->setBulkEditLabel(pht('Set title to'))
         ->setDescription(pht('Name of the task.'))
         ->setConduitDescription(pht('Rename the task.'))
         ->setConduitTypeDescription(pht('New task name.'))
@@ -188,18 +190,21 @@ EODOCS
         ->setKey('owner')
         ->setAliases(array('ownerPHID', 'assign', 'assigned'))
         ->setLabel(pht('Assigned To'))
+        ->setBulkEditLabel(pht('Assign to'))
         ->setDescription(pht('User who is responsible for the task.'))
         ->setConduitDescription(pht('Reassign the task.'))
         ->setConduitTypeDescription(
           pht('New task owner, or `null` to unassign.'))
         ->setTransactionType(ManiphestTaskOwnerTransaction::TRANSACTIONTYPE)
         ->setIsCopyable(true)
+        ->setIsNullable(true)
         ->setSingleValue($object->getOwnerPHID())
         ->setCommentActionLabel(pht('Assign / Claim'))
         ->setCommentActionValue($owner_value),
       id(new PhabricatorSelectEditField())
         ->setKey('status')
         ->setLabel(pht('Status'))
+        ->setBulkEditLabel(pht('Set status to'))
         ->setDescription(pht('Status of the task.'))
         ->setConduitDescription(pht('Change the task status.'))
         ->setConduitTypeDescription(pht('New task status constant.'))
@@ -212,6 +217,7 @@ EODOCS
       id(new PhabricatorSelectEditField())
         ->setKey('priority')
         ->setLabel(pht('Priority'))
+        ->setBulkEditLabel(pht('Set priority to'))
         ->setDescription(pht('Priority of the task.'))
         ->setConduitDescription(pht('Change the priority of the task.'))
         ->setConduitTypeDescription(pht('New task priority constant.'))
@@ -230,6 +236,7 @@ EODOCS
       $fields[] = id(new PhabricatorPointsEditField())
         ->setKey('points')
         ->setLabel($points_label)
+        ->setBulkEditLabel($action_label)
         ->setDescription(pht('Point value of the task.'))
         ->setConduitDescription(pht('Change the task point value.'))
         ->setConduitTypeDescription(pht('New task point value.'))
@@ -242,6 +249,7 @@ EODOCS
     $fields[] = id(new PhabricatorRemarkupEditField())
       ->setKey('description')
       ->setLabel(pht('Description'))
+      ->setBulkEditLabel(pht('Set description to'))
       ->setDescription(pht('Task description.'))
       ->setConduitDescription(pht('Update the task description.'))
       ->setConduitTypeDescription(pht('New task description.'))
@@ -250,6 +258,75 @@ EODOCS
       ->setPreviewPanel(
         id(new PHUIRemarkupPreviewPanel())
           ->setHeader(pht('Description Preview')));
+
+    $parent_type = ManiphestTaskDependedOnByTaskEdgeType::EDGECONST;
+    $subtask_type = ManiphestTaskDependsOnTaskEdgeType::EDGECONST;
+    $commit_type = ManiphestTaskHasCommitEdgeType::EDGECONST;
+
+    $src_phid = $object->getPHID();
+    if ($src_phid) {
+      $edge_query = id(new PhabricatorEdgeQuery())
+        ->withSourcePHIDs(array($src_phid))
+        ->withEdgeTypes(
+          array(
+            $parent_type,
+            $subtask_type,
+            $commit_type,
+          ));
+      $edge_query->execute();
+
+      $parent_phids = $edge_query->getDestinationPHIDs(
+        array($src_phid),
+        array($parent_type));
+
+      $subtask_phids = $edge_query->getDestinationPHIDs(
+        array($src_phid),
+        array($subtask_type));
+
+      $commit_phids = $edge_query->getDestinationPHIDs(
+        array($src_phid),
+        array($commit_type));
+    } else {
+      $parent_phids = array();
+      $subtask_phids = array();
+      $commit_phids = array();
+    }
+
+    $fields[] = id(new PhabricatorHandlesEditField())
+      ->setKey('parents')
+      ->setLabel(pht('Parents'))
+      ->setDescription(pht('Parent tasks.'))
+      ->setConduitDescription(pht('Change the parents of this task.'))
+      ->setConduitTypeDescription(pht('List of parent task PHIDs.'))
+      ->setUseEdgeTransactions(true)
+      ->setIsFormField(false)
+      ->setTransactionType(PhabricatorTransactions::TYPE_EDGE)
+      ->setMetadataValue('edge:type', $parent_type)
+      ->setValue($parent_phids);
+
+    $fields[] = id(new PhabricatorHandlesEditField())
+      ->setKey('subtasks')
+      ->setLabel(pht('Subtasks'))
+      ->setDescription(pht('Subtasks.'))
+      ->setConduitDescription(pht('Change the subtasks of this task.'))
+      ->setConduitTypeDescription(pht('List of subtask PHIDs.'))
+      ->setUseEdgeTransactions(true)
+      ->setIsFormField(false)
+      ->setTransactionType(PhabricatorTransactions::TYPE_EDGE)
+      ->setMetadataValue('edge:type', $subtask_type)
+      ->setValue($subtask_phids);
+
+    $fields[] = id(new PhabricatorHandlesEditField())
+      ->setKey('commits')
+      ->setLabel(pht('Commits'))
+      ->setDescription(pht('Related commits.'))
+      ->setConduitDescription(pht('Change the related commits for this task.'))
+      ->setConduitTypeDescription(pht('List of related commit PHIDs.'))
+      ->setUseEdgeTransactions(true)
+      ->setIsFormField(false)
+      ->setTransactionType(PhabricatorTransactions::TYPE_EDGE)
+      ->setMetadataValue('edge:type', $commit_type)
+      ->setValue($commit_phids);
 
     return $fields;
   }
@@ -322,7 +399,10 @@ EODOCS
     $object,
     array $xactions) {
 
-    if ($request->isAjax()) {
+    $response_type = $request->getStr('responseType');
+    $is_card = ($response_type === 'card');
+
+    if ($is_card) {
       // Reload the task to make sure we pick up the final task state.
       $viewer = $this->getViewer();
       $task = id(new ManiphestTaskQuery())
@@ -332,27 +412,10 @@ EODOCS
         ->needProjectPHIDs(true)
         ->executeOne();
 
-      switch ($request->getStr('responseType')) {
-        case 'card':
-          return $this->buildCardResponse($task);
-        default:
-          return $this->buildListResponse($task);
-      }
-
+      return $this->buildCardResponse($task);
     }
 
     return parent::newEditResponse($request, $object, $xactions);
-  }
-
-  private function buildListResponse(ManiphestTask $task) {
-    $controller = $this->getController();
-
-    $payload = array(
-      'tasks' => $controller->renderSingleTask($task),
-      'data' => array(),
-    );
-
-    return id(new AphrontAjaxResponse())->setContent($payload);
   }
 
   private function buildCardResponse(ManiphestTask $task) {
@@ -378,12 +441,26 @@ EODOCS
     $board_phid = $column->getProjectPHID();
     $object_phid = $task->getPHID();
 
-    return id(new PhabricatorBoardResponseEngine())
+    $order = $request->getStr('order');
+    if ($order) {
+      $ordering = PhabricatorProjectColumnOrder::getOrderByKey($order);
+      $ordering = id(clone $ordering)
+        ->setViewer($viewer);
+    } else {
+      $ordering = null;
+    }
+
+    $engine = id(new PhabricatorBoardResponseEngine())
       ->setViewer($viewer)
       ->setBoardPHID($board_phid)
-      ->setObjectPHID($object_phid)
-      ->setVisiblePHIDs($visible_phids)
-      ->buildResponse();
+      ->setUpdatePHIDs(array($object_phid))
+      ->setVisiblePHIDs($visible_phids);
+
+    if ($ordering) {
+      $engine->setOrdering($ordering);
+    }
+
+    return $engine->buildResponse();
   }
 
   private function getColumnMap(ManiphestTask $task) {

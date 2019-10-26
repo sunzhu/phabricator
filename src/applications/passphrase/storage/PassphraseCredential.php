@@ -8,7 +8,8 @@ final class PassphraseCredential extends PassphraseDAO
     PhabricatorSubscribableInterface,
     PhabricatorDestructibleInterface,
     PhabricatorSpacesInterface,
-    PhabricatorFulltextInterface {
+    PhabricatorFulltextInterface,
+    PhabricatorFerretInterface {
 
   protected $name;
   protected $credentialType;
@@ -49,6 +50,10 @@ final class PassphraseCredential extends PassphraseDAO
 
   public function getMonogram() {
     return 'K'.$this->getID();
+  }
+
+  public function getURI() {
+    return '/'.$this->getMonogram();
   }
 
   protected function getConfiguration() {
@@ -116,19 +121,8 @@ final class PassphraseCredential extends PassphraseDAO
     return new PassphraseCredentialTransactionEditor();
   }
 
-  public function getApplicationTransactionObject() {
-    return $this;
-  }
-
   public function getApplicationTransactionTemplate() {
     return new PassphraseCredentialTransaction();
-  }
-
-  public function willRenderTimeline(
-    PhabricatorApplicationTransactionView $timeline,
-    AphrontRequest $request) {
-
-    return $timeline;
   }
 
 
@@ -194,6 +188,14 @@ final class PassphraseCredential extends PassphraseDAO
 
   public function newFulltextEngine() {
     return new PassphraseCredentialFulltextEngine();
+  }
+
+
+/* -(  PhabricatorFerretInterface  )----------------------------------------- */
+
+
+  public function newFerretEngine() {
+    return new PassphraseCredentialFerretEngine();
   }
 
 

@@ -35,8 +35,7 @@ final class DifferentialDoorkeeperRevisionFeedStoryPublisher
   }
 
   public function getActiveUserPHIDs($object) {
-    $status = $object->getStatus();
-    if ($status == ArcanistDifferentialRevisionStatus::NEEDS_REVIEW) {
+    if ($object->isNeedsReview()) {
       return $object->getReviewerPHIDs();
     } else {
       return array();
@@ -44,8 +43,7 @@ final class DifferentialDoorkeeperRevisionFeedStoryPublisher
   }
 
   public function getPassiveUserPHIDs($object) {
-    $status = $object->getStatus();
-    if ($status == ArcanistDifferentialRevisionStatus::NEEDS_REVIEW) {
+    if ($object->isNeedsReview()) {
       return array();
     } else {
       return $object->getReviewerPHIDs();
@@ -83,8 +81,7 @@ final class DifferentialDoorkeeperRevisionFeedStoryPublisher
   }
 
   private function getTitlePrefix(DifferentialRevision $revision) {
-    $prefix_key = 'metamta.differential.subject-prefix';
-    return PhabricatorEnv::getEnvConfig($prefix_key);
+    return pht('[Differential]');
   }
 
 }

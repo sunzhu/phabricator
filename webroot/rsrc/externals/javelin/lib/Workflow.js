@@ -59,12 +59,15 @@ JX.install('Workflow', {
 
       workflow.setDataWithListOfPairs(pairs);
       workflow.setMethod(form.getAttribute('method'));
-      workflow.listen('finally', function() {
-        // Re-enable form elements
-        for (var ii = 0; ii < inputs.length; ii++) {
-          inputs[ii] && (inputs[ii].disabled = false);
+
+      var onfinally = JX.bind(workflow, function() {
+        if (!this._keepControlsDisabled) {
+          for (var ii = 0; ii < inputs.length; ii++) {
+            inputs[ii] && (inputs[ii].disabled = false);
+          }
         }
       });
+      workflow.listen('finally', onfinally);
 
       return workflow;
     },
@@ -72,6 +75,7 @@ JX.install('Workflow', {
       var workflow = new JX.Workflow(link.href);
       return workflow;
     },
+
     _push : function(workflow) {
       JX.Mask.show();
       JX.Workflow._stack.push(workflow);
@@ -82,16 +86,49 @@ JX.install('Workflow', {
       dialog._destroy();
       JX.Mask.hide();
     },
-    disable : function() {
-      JX.Workflow._disabled = true;
+    _onlink: function(event) {
+      // See T13302. When a user clicks a link in a dialog and that link
+      // triggers a navigation event, we want to close the dialog as though
+      // they had pressed a button.
+
+      // When Quicksand is enabled, this is particularly relevant because
+      // the dialog will stay in the foreground while the page content changes
+      // in the background if we do not dismiss the dialog.
+
+      // If this is a Command-Click, the link will open in a new window.
+      var is_command = !!event.getRawEvent().metaKey;
+      if (is_command) {
+        return;
+      }
+
+      var link = event.getNode('tag:a');
+
+      // If the link is an anchor, or does not go anywhere, ignore the event.
+      var href = link.getAttribute('href');
+      if (typeof href !== 'string') {
+        return;
+      }
+
+      if (!href.length || href[0] === '#') {
+        return;
+      }
+
+      // This link will open in a new window.
+      if (link.target === '_blank') {
+        return;
+      }
+
+      // This link is really a dialog button which we'll handle elsewhere.
+      if (JX.Stratcom.hasSigil(link, 'jx-workflow-button')) {
+        return;
+      }
+
+      // Close the dialog.
+      JX.Workflow._pop();
     },
     _onbutton : function(event) {
 
       if (JX.Stratcom.pass()) {
-        return;
-      }
-
-      if (JX.Workflow._disabled) {
         return;
       }
 
@@ -121,9 +158,6 @@ JX.install('Workflow', {
       if (JX.Stratcom.pass()) {
         return;
       }
-      if (JX.Workflow._disabled) {
-        return;
-      }
       e.prevent();
       var form = e.getNode('jx-dialog');
       var button = JX.DOM.find(form, 'button', '__default__');
@@ -147,6 +181,11 @@ JX.install('Workflow', {
       if (!e.getStopped()) {
         // NOTE: Don't remove the current dialog yet because additional
         // handlers may still want to access the nodes.
+
+        // Disable whatever button the user clicked to prevent duplicate
+        // submission mistakes when you accidentally click a button multiple
+        // times. See T11145.
+        button.disabled = true;
 
         active
           .setURI(form.getAttribute('action') || active.getURI())
@@ -242,6 +281,7 @@ JX.install('Workflow', {
     _form: null,
     _paused: 0,
     _nextCallback: null,
+    _keepControlsDisabled: false,
 
     getSourceForm: function() {
       return this._form;
@@ -276,6 +316,16 @@ JX.install('Workflow', {
       // It is permissible to send back a falsey redirect to force a page
       // reload, so we need to take this branch if the key is present.
       if (r && (typeof r.redirect != 'undefined')) {
+        // Before we redirect to file downloads, we close the dialog. These
+        // redirects aren't real navigation events so we end up stuck in the
+        // dialog otherwise.
+        if (r.close) {
+          this._pop();
+        }
+
+        // If we're redirecting, don't re-enable for controls.
+        this._keepControlsDisabled = true;
+
         JX.$U(r.redirect).go();
       } else if (r && r.dialog) {
         this._push();
@@ -293,6 +343,9 @@ JX.install('Workflow', {
           'didSyntheticSubmit',
           [],
           JX.Workflow._onsyntheticsubmit);
+
+        var onlink = JX.Workflow._onlink;
+        JX.DOM.listen(this._root, 'click', 'tag:a', onlink);
 
         JX.DOM.listen(
           this._root,
@@ -449,11 +502,6 @@ JX.install('Workflow', {
     function close_dialog_when_user_presses_escape(e) {
       if (e.getSpecialKey() != 'esc') {
         // Some key other than escape.
-        return;
-      }
-
-      if (JX.Workflow._disabled) {
-        // Workflows are disabled on this page.
         return;
       }
 

@@ -20,13 +20,26 @@ final class PhabricatorDashboardPanelDatasource
     return $this->filterResultsAgainstTokens($results);
   }
 
-
   protected function renderSpecialTokens(array $values) {
     return $this->renderTokensFromResults($this->buildResults(), $values);
   }
 
   public function buildResults() {
-    $query = id(new PhabricatorDashboardPanelQuery());
+    $query = new PhabricatorDashboardPanelQuery();
+
+    $raw_query = $this->getRawQuery();
+    if (preg_match('/^[wW]\d+\z/', $raw_query)) {
+      $id = trim($raw_query, 'wW');
+      $id = (int)$id;
+      $query->withIDs(array($id));
+    } else {
+      $this->applyFerretConstraints(
+        $query,
+        id(new PhabricatorDashboardPanel())->newFerretEngine(),
+        'title',
+        $this->getRawQuery());
+    }
+
     $panels = $this->executeQuery($query);
 
     $results = array();
@@ -34,17 +47,19 @@ final class PhabricatorDashboardPanelDatasource
       $impl = $panel->getImplementation();
       if ($impl) {
         $type_text = $impl->getPanelTypeName();
+        $icon = $impl->getIcon();
       } else {
         $type_text = nonempty($panel->getPanelType(), pht('Unknown Type'));
+        $icon = 'fa-question';
       }
-      $id = $panel->getID();
+      $phid = $panel->getPHID();
       $monogram = $panel->getMonogram();
       $properties = $panel->getProperties();
 
       $result = id(new PhabricatorTypeaheadResult())
         ->setName($monogram.' '.$panel->getName())
-        ->setPHID($id)
-        ->setIcon($impl->getIcon())
+        ->setPHID($phid)
+        ->setIcon($icon)
         ->addAttribute($type_text);
 
       if (!empty($properties['class'])) {
@@ -55,7 +70,7 @@ final class PhabricatorDashboardPanelDatasource
         $result->setClosed(pht('Archived'));
       }
 
-      $results[$id] = $result;
+      $results[$phid] = $result;
     }
 
     return $results;

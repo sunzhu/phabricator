@@ -70,13 +70,13 @@ JX.install('DiffChangesetList', {
     var onrangedown = JX.bind(this, this._ifawake, this._onrangedown);
     JX.Stratcom.listen(
       'mousedown',
-      ['differential-changeset', 'tag:th'],
+      ['differential-changeset', 'tag:td'],
       onrangedown);
 
     var onrangemove = JX.bind(this, this._ifawake, this._onrangemove);
     JX.Stratcom.listen(
       ['mouseover', 'mouseout'],
-      ['differential-changeset', 'tag:th'],
+      ['differential-changeset', 'tag:td'],
       onrangemove);
 
     var onrangeup = JX.bind(this, this._ifawake, this._onrangeup);
@@ -89,7 +89,8 @@ JX.install('DiffChangesetList', {
   properties: {
     translations: null,
     inlineURI: null,
-    inlineListURI: null
+    inlineListURI: null,
+    isStandalone: false
   },
 
   members: {
@@ -128,6 +129,9 @@ JX.install('DiffChangesetList', {
       this._redrawFocus();
       this._redrawSelection();
       this.resetHover();
+
+      this._bannerChangeset = null;
+      this._redrawBanner();
     },
 
     wake: function() {
@@ -136,12 +140,21 @@ JX.install('DiffChangesetList', {
       this._redrawFocus();
       this._redrawSelection();
 
+      this._bannerChangeset = null;
+      this._redrawBanner();
+
       if (this._initialized) {
         return;
       }
 
       this._initialized = true;
       var pht = this.getTranslations();
+
+      // We may be viewing the normal "/D123" view (with all the changesets)
+      // or the standalone view (with just one changeset). In the standalone
+      // view, some options (like jumping to next or previous file) do not
+      // make sense and do not function.
+      var standalone = this.getIsStandalone();
 
       var label;
 
@@ -151,11 +164,13 @@ JX.install('DiffChangesetList', {
       label = pht('Jump to previous change.');
       this._installJumpKey('k', label, -1);
 
-      label = pht('Jump to next file.');
-      this._installJumpKey('J', label, 1, 'file');
+      if (!standalone) {
+        label = pht('Jump to next file.');
+        this._installJumpKey('J', label, 1, 'file');
 
-      label = pht('Jump to previous file.');
-      this._installJumpKey('K', label, -1, 'file');
+        label = pht('Jump to previous file.');
+        this._installJumpKey('K', label, -1, 'file');
+      }
 
       label = pht('Jump to next inline comment.');
       this._installJumpKey('n', label, 1, 'comment');
@@ -170,11 +185,13 @@ JX.install('DiffChangesetList', {
         'Jump to previous inline comment, including collapsed comments.');
       this._installJumpKey('P', label, -1, 'comment', true);
 
-      label = pht('Hide or show the current file.');
-      this._installKey('h', label, this._onkeytogglefile);
+      if (!standalone) {
+        label = pht('Hide or show the current file.');
+        this._installKey('h', label, this._onkeytogglefile);
 
-      label = pht('Jump to the table of contents.');
-      this._installKey('t', label, this._ontoc);
+        label = pht('Jump to the table of contents.');
+        this._installKey('t', label, this._ontoc);
+      }
 
       label = pht('Reply to selected inline comment or change.');
       this._installKey('r', label, JX.bind(this, this._onkeyreply, false));
@@ -343,7 +360,7 @@ JX.install('DiffChangesetList', {
           while (row) {
             var header = row.firstChild;
             while (header) {
-              if (JX.DOM.isType(header, 'th')) {
+              if (this.getLineNumberFromHeader(header)) {
                 if (header.className.indexOf('old') !== -1) {
                   old_list.push(header);
                 } else if (header.className.indexOf('new') !== -1) {
@@ -465,7 +482,7 @@ JX.install('DiffChangesetList', {
       new JX.Notification()
         .setContent(message)
         .alterClassName('jx-notification-alert', true)
-        .setDuration(1000)
+        .setDuration(3000)
         .show();
     },
 
@@ -691,6 +708,7 @@ JX.install('DiffChangesetList', {
         'div',
         'differential-changeset');
 
+      var changeset_list = this;
       var changeset = this.getChangesetForNode(node);
 
       var menu = new JX.PHUIXDropdownMenu(button);
@@ -738,6 +756,22 @@ JX.install('DiffChangesetList', {
       var up_item = new JX.PHUIXActionView()
         .setHandler(function(e) {
           if (changeset.isLoaded()) {
+
+            // Don't let the user swap display modes if a comment is being
+            // edited, since they might lose their work. See PHI180.
+            var inlines = changeset.getInlines();
+            for (var ii = 0; ii < inlines.length; ii++) {
+              if (inlines[ii].isEditing()) {
+                changeset_list._warnUser(
+                  pht(
+                    'Finish editing inline comments before changing display ' +
+                    'modes.'));
+                e.prevent();
+                menu.close();
+                return;
+              }
+            }
+
             var renderer = changeset.getRenderer();
             if (renderer == '1up') {
               renderer = '2up';
@@ -793,6 +827,26 @@ JX.install('DiffChangesetList', {
         });
       list.addItem(highlight_item);
 
+      var engine_item = new JX.PHUIXActionView()
+        .setIcon('fa-file-image-o')
+        .setName(pht('View As...'))
+        .setHandler(function(e) {
+          var params = {
+            engine: changeset.getDocumentEngine(),
+          };
+
+          new JX.Workflow('/services/viewas/', params)
+            .setHandler(function(r) {
+              changeset.setDocumentEngine(r.engine);
+              changeset.reload();
+            })
+            .start();
+
+          e.prevent();
+          menu.close();
+        });
+      list.addItem(engine_item);
+
       add_link('fa-arrow-left', pht('Show Raw File (Left)'), data.leftURI);
       add_link('fa-arrow-right', pht('Show Raw File (Right)'), data.rightURI);
       add_link('fa-pencil', pht('Open in Editor'), data.editor, true);
@@ -826,6 +880,7 @@ JX.install('DiffChangesetList', {
 
         encoding_item.setDisabled(!changeset.isLoaded());
         highlight_item.setDisabled(!changeset.isLoaded());
+        engine_item.setDisabled(!changeset.isLoaded());
 
         if (changeset.isLoaded()) {
           if (changeset.getRenderer() == '2up') {
@@ -898,6 +953,11 @@ JX.install('DiffChangesetList', {
       this._bannerChangeset = null;
 
       this._redrawBanner();
+
+      var changesets = this._changesets;
+      for (var ii = 0; ii < changesets.length; ii++) {
+        changesets[ii].redrawFileTree();
+      }
     },
 
     _onscroll: function() {
@@ -1135,30 +1195,26 @@ JX.install('DiffChangesetList', {
         bot = tmp;
       }
 
-      // Find the leftmost cell that we're going to highlight: this is the next
-      // <td /> in the row. In 2up views, it should be directly adjacent. In
-      // 1up views, we may have to skip over the other line number column.
-      var l = top;
-      while (JX.DOM.isType(l, 'th')) {
-        l = l.nextSibling;
+      // Find the leftmost cell that we're going to highlight. This is the
+      // next sibling with a "data-copy-mode" attribute, which is a marker
+      // for the cell with actual content in it.
+      var content_cell = top;
+      while (content_cell && !content_cell.getAttribute('data-copy-mode')) {
+        content_cell = content_cell.nextSibling;
       }
 
-      // Find the rightmost cell that we're going to highlight: this is the
-      // farthest consecutive, adjacent <td /> in the row. Sometimes the left
-      // and right nodes are the same (left side of 2up view); sometimes we're
-      // going to highlight several nodes (copy + code + coverage).
-      var r = l;
-      while (r.nextSibling && JX.DOM.isType(r.nextSibling, 'td')) {
-        r = r.nextSibling;
+      // If we didn't find a cell to highlight, don't highlight anything.
+      if (!content_cell) {
+        return;
       }
 
-      var pos = JX.$V(l)
-        .add(JX.Vector.getAggregateScrollForNode(l));
+      var pos = JX.$V(content_cell)
+        .add(JX.Vector.getAggregateScrollForNode(content_cell));
 
-      var dim = JX.$V(r)
-        .add(JX.Vector.getAggregateScrollForNode(r))
+      var dim = JX.$V(content_cell)
+        .add(JX.Vector.getAggregateScrollForNode(content_cell))
         .add(-pos.x, -pos.y)
-        .add(JX.Vector.getDim(r));
+        .add(JX.Vector.getDim(content_cell));
 
       var bpos = JX.$V(bot)
         .add(JX.Vector.getAggregateScrollForNode(bot));
@@ -1207,12 +1263,24 @@ JX.install('DiffChangesetList', {
       return changeset.getInlineForRow(inline_row);
     },
 
-    getLineNumberFromHeader: function(th) {
-      try {
-        return parseInt(th.id.match(/^C\d+[ON]L(\d+)$/)[1], 10);
-      } catch (x) {
+    getLineNumberFromHeader: function(node) {
+      var n = parseInt(node.getAttribute('data-n'));
+
+      if (!n) {
         return null;
       }
+
+      // If this is a line number that's part of a row showing more context,
+      // we don't want to let users leave inlines here.
+
+      try {
+        JX.DOM.findAbove(node, 'tr', 'context-target');
+        return null;
+      } catch (ex) {
+        // Ignore.
+      }
+
+      return n;
     },
 
     getDisplaySideFromHeader: function(th) {
@@ -1222,7 +1290,10 @@ JX.install('DiffChangesetList', {
     _onrangedown: function(e) {
       // NOTE: We're allowing "mousedown" from a touch event through so users
       // can leave inlines on a single line.
-      if (e.isRightButton()) {
+
+      // See PHI985. We want to exclude both right-mouse and middle-mouse
+      // clicks from continuing.
+      if (!e.isLeftButton()) {
         return;
       }
 
@@ -1257,7 +1328,7 @@ JX.install('DiffChangesetList', {
     },
 
     _updateRange: function(target, is_out) {
-      // Don't update the range if this "<th />" doesn't correspond to a line
+      // Don't update the range if this target doesn't correspond to a line
       // number. For instance, this may be a dead line number, like the empty
       // line numbers on the left hand side of a newly added file.
       var number = this.getLineNumberFromHeader(target);
@@ -1352,17 +1423,18 @@ JX.install('DiffChangesetList', {
       var node = this._getBannerNode();
       var changeset = this._getVisibleChangeset();
 
+      if (!changeset) {
+        this._bannerChangeset = null;
+        JX.DOM.remove(node);
+        return;
+      }
+
       // Don't do anything if nothing has changed. This seems to avoid some
       // flickering issues in Safari, at least.
       if (this._bannerChangeset === changeset) {
         return;
       }
       this._bannerChangeset = changeset;
-
-      if (!changeset) {
-        JX.DOM.remove(node);
-        return;
-      }
 
       var inlines = this._getInlinesByType();
 
@@ -1622,9 +1694,12 @@ JX.install('DiffChangesetList', {
 
     _getMenuButton: function() {
       if (!this._menuButton) {
+        var pht = this.getTranslations();
+
         var button = new JX.PHUIXButtonView()
           .setIcon('fa-bars')
-          .setButtonType(JX.PHUIXButtonView.BUTTONTYPE_SIMPLE);
+          .setButtonType(JX.PHUIXButtonView.BUTTONTYPE_SIMPLE)
+          .setAuralLabel(pht('Display Options'));
 
         var dropdown = new JX.PHUIXDropdownMenu(button.getNode());
         this._menuItems = {};
@@ -1662,8 +1737,6 @@ JX.install('DiffChangesetList', {
         }
 
         dropdown.listen('open', JX.bind(this, this._ondropdown));
-
-        var pht = this.getTranslations();
 
         if (this.getInlineListURI()) {
           list.addItem(

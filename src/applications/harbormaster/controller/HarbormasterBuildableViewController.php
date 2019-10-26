@@ -3,6 +3,10 @@
 final class HarbormasterBuildableViewController
   extends HarbormasterController {
 
+  public function shouldAllowPublic() {
+    return true;
+  }
+
   public function handleRequest(AphrontRequest $request) {
     $viewer = $this->getViewer();
 
@@ -36,6 +40,10 @@ final class HarbormasterBuildableViewController
       ->setHeader($title)
       ->setUser($viewer)
       ->setPolicyObject($buildable)
+      ->setStatus(
+        $buildable->getStatusIcon(),
+        $buildable->getStatusColor(),
+        $buildable->getStatusDisplayName())
       ->setHeaderIcon('fa-recycle');
 
     $timeline = $this->buildTransactionTimeline(
@@ -120,7 +128,7 @@ final class HarbormasterBuildableViewController
     $curtain->addAction(
       id(new PhabricatorActionView())
         ->setIcon('fa-repeat')
-        ->setName(pht('Restart All Builds'))
+        ->setName(pht('Restart Builds'))
         ->setHref($this->getApplicationURI($restart_uri))
         ->setWorkflow(true)
         ->setDisabled(!$can_restart || !$can_edit));
@@ -128,7 +136,7 @@ final class HarbormasterBuildableViewController
     $curtain->addAction(
       id(new PhabricatorActionView())
         ->setIcon('fa-pause')
-        ->setName(pht('Pause All Builds'))
+        ->setName(pht('Pause Builds'))
         ->setHref($this->getApplicationURI($pause_uri))
         ->setWorkflow(true)
         ->setDisabled(!$can_pause || !$can_edit));
@@ -136,7 +144,7 @@ final class HarbormasterBuildableViewController
     $curtain->addAction(
       id(new PhabricatorActionView())
         ->setIcon('fa-play')
-        ->setName(pht('Resume All Builds'))
+        ->setName(pht('Resume Builds'))
         ->setHref($this->getApplicationURI($resume_uri))
         ->setWorkflow(true)
         ->setDisabled(!$can_resume || !$can_edit));
@@ -144,7 +152,7 @@ final class HarbormasterBuildableViewController
     $curtain->addAction(
       id(new PhabricatorActionView())
         ->setIcon('fa-exclamation-triangle')
-        ->setName(pht('Abort All Builds'))
+        ->setName(pht('Abort Builds'))
         ->setHref($this->getApplicationURI($abort_uri))
         ->setWorkflow(true)
         ->setDisabled(!$can_abort || !$can_edit));
@@ -304,13 +312,14 @@ final class HarbormasterBuildableViewController
       'buildTargetPHID IN (%Ls)',
       $target_phids);
 
-    $unit_data = id(new HarbormasterBuildUnitMessage())->loadAllWhere(
-      'buildTargetPHID IN (%Ls)',
-      $target_phids);
+    $unit_data = id(new HarbormasterBuildUnitMessageQuery())
+      ->setViewer($viewer)
+      ->withBuildTargetPHIDs($target_phids)
+      ->execute();
 
     if ($lint_data) {
       $lint_table = id(new HarbormasterLintPropertyView())
-        ->setUser($viewer)
+        ->setViewer($viewer)
         ->setLimit(10)
         ->setLintMessages($lint_data);
 
@@ -335,6 +344,7 @@ final class HarbormasterBuildableViewController
 
     if ($unit_data) {
       $unit = id(new HarbormasterUnitSummaryView())
+        ->setViewer($viewer)
         ->setBuildable($buildable)
         ->setUnitMessages($unit_data)
         ->setShowViewAll(true)
@@ -345,7 +355,5 @@ final class HarbormasterBuildableViewController
 
     return array($lint, $unit);
   }
-
-
 
 }

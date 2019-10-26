@@ -289,31 +289,30 @@ final class DrydockLandRepositoryOperation
       );
     }
 
-    $status_accepted = ArcanistDifferentialRevisionStatus::ACCEPTED;
-    if ($revision->getStatus() != $status_accepted) {
-      switch ($revision->getStatus()) {
-        case ArcanistDifferentialRevisionStatus::CLOSED:
-          return array(
-            'title' => pht('Revision Closed'),
-            'body' => pht(
-              'This revision has already been closed. Only open, accepted '.
-              'revisions may land.'),
-          );
-        case ArcanistDifferentialRevisionStatus::ABANDONED:
-          return array(
-            'title' => pht('Revision Abandoned'),
-            'body' => pht(
-              'This revision has been abandoned. Only accepted revisions '.
-              'may land.'),
-          );
-        default:
-          return array(
-            'title' => pht('Revision Not Accepted'),
-            'body' => pht(
-              'This revision is still under review. Only revisions which '.
-              'have been accepted may land.'),
-          );
-      }
+    if ($revision->isAccepted()) {
+      // We can land accepted revisions, so continue below. Otherwise, raise
+      // an error with tailored messaging for the most common cases.
+    } else if ($revision->isAbandoned()) {
+      return array(
+        'title' => pht('Revision Abandoned'),
+        'body' => pht(
+          'This revision has been abandoned. Only accepted revisions '.
+          'may land.'),
+      );
+    } else if ($revision->isClosed()) {
+      return array(
+        'title' => pht('Revision Closed'),
+        'body' => pht(
+          'This revision has already been closed. Only open, accepted '.
+          'revisions may land.'),
+      );
+    } else {
+      return array(
+        'title' => pht('Revision Not Accepted'),
+        'body' => pht(
+          'This revision is still under review. Only revisions which '.
+          'have been accepted may land.'),
+      );
     }
 
     // Check for other operations. Eventually this should probably be more
@@ -402,7 +401,7 @@ final class DrydockLandRepositoryOperation
           'body' => pht(
             'When this diff was generated, the server was running an older '.
             'version of Phabricator which did not support staging areas for '.
-            'this version control system, so the chagne was not pushed to '.
+            'this version control system, so the change was not pushed to '.
             'staging. Changes must be pushed to staging before they can be '.
             'landed from the web.'),
         );

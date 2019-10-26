@@ -22,11 +22,12 @@ JX.install('DiffChangeset', {
 
     this._renderURI = data.renderURI;
     this._ref = data.ref;
-    this._whitespace = data.whitespace;
     this._renderer = data.renderer;
     this._highlight = data.highlight;
+    this._documentEngine = data.documentEngine;
     this._encoding = data.encoding;
     this._loaded = data.loaded;
+    this._treeNodeID = data.treeNodeID;
 
     this._leftID = data.left;
     this._rightID = data.right;
@@ -45,9 +46,9 @@ JX.install('DiffChangeset', {
 
     _renderURI: null,
     _ref: null,
-    _whitespace: null,
     _renderer: null,
     _highlight: null,
+    _documentEngine: null,
     _encoding: null,
     _undoTemplates: null,
 
@@ -62,6 +63,7 @@ JX.install('DiffChangeset', {
 
     _changesetList: null,
     _icon: null,
+    _treeNodeID: null,
 
     getLeftChangesetID: function() {
       return this._leftID;
@@ -308,9 +310,9 @@ JX.install('DiffChangeset', {
     _getViewParameters: function() {
       return {
         ref: this._ref,
-        whitespace: this._whitespace || '',
         renderer: this.getRenderer() || '',
         highlight: this._highlight || '',
+        engine: this._documentEngine || '',
         encoding: this._encoding || ''
       };
     },
@@ -365,6 +367,14 @@ JX.install('DiffChangeset', {
 
     getHighlight: function() {
       return this._highlight;
+    },
+
+    setDocumentEngine: function(engine) {
+      this._documentEngine = engine;
+    },
+
+    getDocumentEngine: function(engine) {
+      return this._documentEngine;
     },
 
     getSelectableItems: function() {
@@ -737,7 +747,8 @@ JX.install('DiffChangeset', {
 
     _rebuildAllInlines: function() {
       var rows = JX.DOM.scry(this._node, 'tr');
-      for (var ii = 0; ii < rows.length; ii++) {
+      var ii;
+      for (ii = 0; ii < rows.length; ii++) {
         var row = rows[ii];
         if (this._getRowType(row) != 'comment') {
           continue;
@@ -747,6 +758,75 @@ JX.install('DiffChangeset', {
         // them to this Changeset's list of inlines.
         this.getInlineForRow(row);
       }
+    },
+
+    redrawFileTree: function() {
+      var tree;
+      try {
+        tree = JX.$(this._treeNodeID);
+      } catch (e) {
+        return;
+      }
+
+      var inlines = this._inlines;
+      var done = [];
+      var undone = [];
+      var inline;
+
+      for (var ii = 0; ii < inlines.length; ii++) {
+        inline = inlines[ii];
+
+        if (inline.isDeleted()) {
+          continue;
+        }
+
+        if (inline.isSynthetic()) {
+          continue;
+        }
+
+        if (inline.isEditing()) {
+          continue;
+        }
+
+        if (!inline.getID()) {
+          // These are new comments which have been cancelled, and do not
+          // count as anything.
+          continue;
+        }
+
+        if (inline.isDraft()) {
+          continue;
+        }
+
+        if (!inline.isDone()) {
+          undone.push(inline);
+        } else {
+          done.push(inline);
+        }
+      }
+
+      var total = done.length + undone.length;
+
+      var hint;
+      var is_visible;
+      var is_completed;
+      if (total) {
+        if (done.length) {
+          hint = [done.length, '/', total];
+        } else  {
+          hint = total;
+        }
+        is_visible = true;
+        is_completed = (done.length == total);
+      } else {
+        hint = '-';
+        is_visible = false;
+        is_completed = false;
+      }
+
+      JX.DOM.setContent(tree, hint);
+      JX.DOM.alterClass(tree, 'filetree-comments-visible', is_visible);
+      JX.DOM.alterClass(tree, 'filetree-comments-completed', is_completed);
     },
 
     toggleVisibility: function() {

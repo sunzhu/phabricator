@@ -2,7 +2,7 @@
 
 /**
  * @task uri        Repository URI Management
- * @task autoclose  Autoclose
+ * @task publishing Publishing
  * @task sync       Cluster Synchronization
  */
 final class PhabricatorRepository extends PhabricatorRepositoryDAO
@@ -12,10 +12,12 @@ final class PhabricatorRepository extends PhabricatorRepositoryDAO
     PhabricatorFlaggableInterface,
     PhabricatorMarkupInterface,
     PhabricatorDestructibleInterface,
+    PhabricatorDestructibleCodexInterface,
     PhabricatorProjectInterface,
     PhabricatorSpacesInterface,
     PhabricatorConduitResultInterface,
-    PhabricatorFulltextInterface {
+    PhabricatorFulltextInterface,
+    PhabricatorFerretInterface {
 
   /**
    * Shortest hash we'll recognize in raw "a829f32" form.
@@ -32,6 +34,8 @@ final class PhabricatorRepository extends PhabricatorRepositoryDAO
    */
   const IMPORT_THRESHOLD = 7;
 
+  const LOWPRI_THRESHOLD = 64;
+
   const TABLE_PATH = 'repository_path';
   const TABLE_PATHCHANGE = 'repository_pathchange';
   const TABLE_FILESYSTEM = 'repository_filesystem';
@@ -39,13 +43,6 @@ final class PhabricatorRepository extends PhabricatorRepositoryDAO
   const TABLE_LINTMESSAGE = 'repository_lintmessage';
   const TABLE_PARENTS = 'repository_parents';
   const TABLE_COVERAGE = 'repository_coverage';
-
-  const BECAUSE_REPOSITORY_IMPORTING = 'auto/importing';
-  const BECAUSE_AUTOCLOSE_DISABLED = 'auto/disabled';
-  const BECAUSE_NOT_ON_AUTOCLOSE_BRANCH = 'auto/nobranch';
-  const BECAUSE_BRANCH_UNTRACKED = 'auto/notrack';
-  const BECAUSE_BRANCH_NOT_AUTOCLOSE = 'auto/noclose';
-  const BECAUSE_AUTOCLOSE_FORCED = 'auto/forced';
 
   const STATUS_ACTIVE = 'active';
   const STATUS_INACTIVE = 'inactive';
@@ -237,20 +234,6 @@ final class PhabricatorRepository extends PhabricatorRepositoryDAO
     return idx($this->details, $key, $default);
   }
 
-  public function getHumanReadableDetail($key, $default = null) {
-    $value = $this->getDetail($key, $default);
-
-    switch ($key) {
-      case 'branch-filter':
-      case 'close-commits-filter':
-        $value = array_keys($value);
-        $value = implode(', ', $value);
-        break;
-    }
-
-    return $value;
-  }
-
   public function setDetail($key, $value) {
     $this->details[$key] = $value;
     return $this;
@@ -362,7 +345,7 @@ final class PhabricatorRepository extends PhabricatorRepositoryDAO
     if (!strlen($name)) {
       $name = $this->getName();
       $name = phutil_utf8_strtolower($name);
-      $name = preg_replace('@[/ -:<>]+@', '-', $name);
+      $name = preg_replace('@[ -/:->]+@', '-', $name);
       $name = trim($name, '-');
       if (!strlen($name)) {
         $name = $this->getCallsign();
@@ -701,7 +684,9 @@ final class PhabricatorRepository extends PhabricatorRepositoryDAO
       case 'history':
       case 'graph':
       case 'clone':
+      case 'blame':
       case 'browse':
+      case 'document':
       case 'change':
       case 'lastmodified':
       case 'tags':
@@ -779,7 +764,9 @@ final class PhabricatorRepository extends PhabricatorRepositoryDAO
       case 'change':
       case 'history':
       case 'graph':
+      case 'blame':
       case 'browse':
+      case 'document':
       case 'lastmodified':
       case 'tags':
       case 'branches':
@@ -828,8 +815,6 @@ final class PhabricatorRepository extends PhabricatorRepositoryDAO
       return $uri;
     }
 
-    $uri = new PhutilURI($uri);
-
     if (isset($params['lint'])) {
       $params['params'] = idx($params, 'params', array()) + array(
         'lint' => $params['lint'],
@@ -838,11 +823,7 @@ final class PhabricatorRepository extends PhabricatorRepositoryDAO
 
     $query = idx($params, 'params', array()) + $query;
 
-    if ($query) {
-      $uri->setQueryParams($query);
-    }
-
-    return $uri;
+    return new PhutilURI($uri, $query);
   }
 
   public function updateURIIndex() {
@@ -967,6 +948,10 @@ final class PhabricatorRepository extends PhabricatorRepositoryDAO
     return $this->isBranchInFilter($branch, 'branch-filter');
   }
 
+  public function isBranchPermanentRef($branch) {
+    return $this->isBranchInFilter($branch, 'close-commits-filter');
+  }
+
   public function formatCommitName($commit_identifier, $local = false) {
     $vcs = $this->getVersionControlSystem();
 
@@ -1020,7 +1005,7 @@ final class PhabricatorRepository extends PhabricatorRepositoryDAO
     $done = 0;
     $total = 0;
     foreach ($progress as $row) {
-      $total += $row['N'] * 4;
+      $total += $row['N'] * 3;
       $status = $row['importStatus'];
       if ($status & PhabricatorRepositoryCommit::IMPORTED_MESSAGE) {
         $done += $row['N'];
@@ -1028,10 +1013,7 @@ final class PhabricatorRepository extends PhabricatorRepositoryDAO
       if ($status & PhabricatorRepositoryCommit::IMPORTED_CHANGE) {
         $done += $row['N'];
       }
-      if ($status & PhabricatorRepositoryCommit::IMPORTED_OWNERS) {
-        $done += $row['N'];
-      }
-      if ($status & PhabricatorRepositoryCommit::IMPORTED_HERALD) {
+      if ($status & PhabricatorRepositoryCommit::IMPORTED_PUBLISH) {
         $done += $row['N'];
       }
     }
@@ -1051,149 +1033,51 @@ final class PhabricatorRepository extends PhabricatorRepositoryDAO
     return $ratio;
   }
 
-  /**
-   * Should this repository publish feed, notifications, audits, and email?
-   *
-   * We do not publish information about repositories during initial import,
-   * or if the repository has been set not to publish.
-   */
-  public function shouldPublish() {
-    if ($this->isImporting()) {
-      return false;
-    }
+/* -(  Publishing  )--------------------------------------------------------- */
 
-    if ($this->getDetail('herald-disabled')) {
-      return false;
-    }
-
-    return true;
+  public function newPublisher() {
+    return id(new PhabricatorRepositoryPublisher())
+      ->setRepository($this);
   }
 
-
-/* -(  Autoclose  )---------------------------------------------------------- */
-
-
-  public function shouldAutocloseRef(DiffusionRepositoryRef $ref) {
-    if (!$ref->isBranch()) {
-      return false;
-    }
-
-    return $this->shouldAutocloseBranch($ref->getShortName());
+  public function isPublishingDisabled() {
+    return $this->getDetail('herald-disabled');
   }
 
-  /**
-   * Determine if autoclose is active for a branch.
-   *
-   * For more details about why, use @{method:shouldSkipAutocloseBranch}.
-   *
-   * @param string Branch name to check.
-   * @return bool True if autoclose is active for the branch.
-   * @task autoclose
-   */
-  public function shouldAutocloseBranch($branch) {
-    return ($this->shouldSkipAutocloseBranch($branch) === null);
+  public function getPermanentRefRules() {
+    return array_keys($this->getDetail('close-commits-filter', array()));
   }
 
-  /**
-   * Determine if autoclose is active for a commit.
-   *
-   * For more details about why, use @{method:shouldSkipAutocloseCommit}.
-   *
-   * @param PhabricatorRepositoryCommit Commit to check.
-   * @return bool True if autoclose is active for the commit.
-   * @task autoclose
-   */
-  public function shouldAutocloseCommit(PhabricatorRepositoryCommit $commit) {
-    return ($this->shouldSkipAutocloseCommit($commit) === null);
+  public function setPermanentRefRules(array $rules) {
+    $rules = array_fill_keys($rules, true);
+    $this->setDetail('close-commits-filter', $rules);
+    return $this;
   }
 
-
-  /**
-   * Determine why autoclose should be skipped for a branch.
-   *
-   * This method gives a detailed reason why autoclose will be skipped. To
-   * perform a simple test, use @{method:shouldAutocloseBranch}.
-   *
-   * @param string Branch name to check.
-   * @return const|null Constant identifying reason to skip this branch, or null
-   *   if autoclose is active.
-   * @task autoclose
-   */
-  public function shouldSkipAutocloseBranch($branch) {
-    $all_reason = $this->shouldSkipAllAutoclose();
-    if ($all_reason) {
-      return $all_reason;
-    }
-
-    if (!$this->shouldTrackBranch($branch)) {
-      return self::BECAUSE_BRANCH_UNTRACKED;
-    }
-
-    if (!$this->isBranchInFilter($branch, 'close-commits-filter')) {
-      return self::BECAUSE_BRANCH_NOT_AUTOCLOSE;
-    }
-
-    return null;
+  public function getTrackOnlyRules() {
+    return array_keys($this->getDetail('branch-filter', array()));
   }
 
-
-  /**
-   * Determine why autoclose should be skipped for a commit.
-   *
-   * This method gives a detailed reason why autoclose will be skipped. To
-   * perform a simple test, use @{method:shouldAutocloseCommit}.
-   *
-   * @param PhabricatorRepositoryCommit Commit to check.
-   * @return const|null Constant identifying reason to skip this commit, or null
-   *   if autoclose is active.
-   * @task autoclose
-   */
-  public function shouldSkipAutocloseCommit(
-    PhabricatorRepositoryCommit $commit) {
-
-    $all_reason = $this->shouldSkipAllAutoclose();
-    if ($all_reason) {
-      return $all_reason;
-    }
-
-    switch ($this->getVersionControlSystem()) {
-      case PhabricatorRepositoryType::REPOSITORY_TYPE_SVN:
-      case PhabricatorRepositoryType::REPOSITORY_TYPE_MERCURIAL:
-        return null;
-      case PhabricatorRepositoryType::REPOSITORY_TYPE_GIT:
-        break;
-      default:
-        throw new Exception(pht('Unrecognized version control system.'));
-    }
-
-    $closeable_flag = PhabricatorRepositoryCommit::IMPORTED_CLOSEABLE;
-    if (!$commit->isPartiallyImported($closeable_flag)) {
-      return self::BECAUSE_NOT_ON_AUTOCLOSE_BRANCH;
-    }
-
-    return null;
+  public function setTrackOnlyRules(array $rules) {
+    $rules = array_fill_keys($rules, true);
+    $this->setDetail('branch-filter', $rules);
+    return $this;
   }
 
-
-  /**
-   * Determine why all autoclose operations should be skipped for this
-   * repository.
-   *
-   * @return const|null Constant identifying reason to skip all autoclose
-   *   operations, or null if autoclose operations are not blocked at the
-   *   repository level.
-   * @task autoclose
-   */
-  private function shouldSkipAllAutoclose() {
-    if ($this->isImporting()) {
-      return self::BECAUSE_REPOSITORY_IMPORTING;
+  public function supportsFetchRules() {
+    if ($this->isGit()) {
+      return true;
     }
 
-    if ($this->getDetail('disable-autoclose', false)) {
-      return self::BECAUSE_AUTOCLOSE_DISABLED;
-    }
+    return false;
+  }
 
-    return null;
+  public function getFetchRules() {
+    return $this->getDetail('fetch-rules', array());
+  }
+
+  public function setFetchRules(array $rules) {
+    return $this->setDetail('fetch-rules', $rules);
   }
 
 
@@ -1494,9 +1378,18 @@ final class PhabricatorRepository extends PhabricatorRepositoryDAO
     return $this->setDetail('hosting-enabled', $enabled);
   }
 
-  public function canServeProtocol($protocol, $write) {
-    if (!$this->isTracked()) {
-      return false;
+  public function canServeProtocol(
+    $protocol,
+    $write,
+    $is_intracluster = false) {
+
+    // See T13192. If a repository is inactive, don't serve it to users. We
+    // still synchronize it within the cluster and serve it to other repository
+    // nodes.
+    if (!$is_intracluster) {
+      if (!$this->isTracked()) {
+        return false;
+      }
     }
 
     $clone_uris = $this->getCloneURIs();
@@ -1514,6 +1407,12 @@ final class PhabricatorRepository extends PhabricatorRepositoryDAO
         if ($io_type == PhabricatorRepositoryURI::IO_READ) {
           return true;
         }
+      }
+    }
+
+    if ($write) {
+      if ($this->isReadOnly()) {
+        return false;
       }
     }
 
@@ -1625,8 +1524,7 @@ final class PhabricatorRepository extends PhabricatorRepositoryDAO
       return false;
     }
 
-    // TODO: Unprototype this feature.
-    if (!PhabricatorEnv::getEnvConfig('phabricator.show-prototypes')) {
+    if (!PhabricatorEnv::getEnvConfig('diffusion.allow-git-lfs')) {
       return false;
     }
 
@@ -1669,6 +1567,18 @@ final class PhabricatorRepository extends PhabricatorRepositoryDAO
 
   public function shouldAllowDangerousChanges() {
     return (bool)$this->getDetail('allow-dangerous-changes');
+  }
+
+  public function canAllowEnormousChanges() {
+    if (!$this->isHosted()) {
+      return false;
+    }
+
+    return true;
+  }
+
+  public function shouldAllowEnormousChanges() {
+    return (bool)$this->getDetail('allow-enormous-changes');
   }
 
   public function writeStatusMessage(
@@ -1873,25 +1783,94 @@ final class PhabricatorRepository extends PhabricatorRepositoryDAO
 
 
   /**
-   * Retrieve the sevice URI for the device hosting this repository.
+   * Time limit for cloning or copying this repository.
+   *
+   * This limit is used to timeout operations like `git clone` or `git fetch`
+   * when doing intracluster synchronization, building working copies, etc.
+   *
+   * @return int Maximum number of seconds to spend copying this repository.
+   */
+  public function getCopyTimeLimit() {
+    return $this->getDetail('limit.copy');
+  }
+
+  public function setCopyTimeLimit($limit) {
+    return $this->setDetail('limit.copy', $limit);
+  }
+
+  public function getDefaultCopyTimeLimit() {
+    return phutil_units('15 minutes in seconds');
+  }
+
+  public function getEffectiveCopyTimeLimit() {
+    $limit = $this->getCopyTimeLimit();
+    if ($limit) {
+      return $limit;
+    }
+
+    return $this->getDefaultCopyTimeLimit();
+  }
+
+  public function getFilesizeLimit() {
+    return $this->getDetail('limit.filesize');
+  }
+
+  public function setFilesizeLimit($limit) {
+    return $this->setDetail('limit.filesize', $limit);
+  }
+
+  public function getTouchLimit() {
+    return $this->getDetail('limit.touch');
+  }
+
+  public function setTouchLimit($limit) {
+    return $this->setDetail('limit.touch', $limit);
+  }
+
+  /**
+   * Retrieve the service URI for the device hosting this repository.
    *
    * See @{method:newConduitClient} for a general discussion of interacting
    * with repository services. This method provides lower-level resolution of
    * services, returning raw URIs.
    *
    * @param PhabricatorUser Viewing user.
-   * @param bool `true` to throw if a remote URI would be returned.
-   * @param list<string> List of allowable protocols.
+   * @param map<string, wild> Constraints on selectable services.
    * @return string|null URI, or `null` for local repositories.
    */
   public function getAlmanacServiceURI(
     PhabricatorUser $viewer,
-    $never_proxy,
-    array $protocols) {
+    array $options) {
+
+    $refs = $this->getAlmanacServiceRefs($viewer, $options);
+
+    if (!$refs) {
+      return null;
+    }
+
+    $ref = head($refs);
+    return $ref->getURI();
+  }
+
+  public function getAlmanacServiceRefs(
+    PhabricatorUser $viewer,
+    array $options) {
+
+    PhutilTypeSpec::checkMap(
+      $options,
+      array(
+        'neverProxy' => 'bool',
+        'protocols' => 'list<string>',
+        'writable' => 'optional bool',
+      ));
+
+    $never_proxy = $options['neverProxy'];
+    $protocols = $options['protocols'];
+    $writable = idx($options, 'writable', false);
 
     $cache_key = $this->getAlmanacServiceCacheKey();
     if (!$cache_key) {
-      return null;
+      return array();
     }
 
     $cache = PhabricatorCaches::getMutableStructureCache();
@@ -1904,7 +1883,7 @@ final class PhabricatorRepository extends PhabricatorRepositoryDAO
     }
 
     if ($uris === null) {
-      return null;
+      return array();
     }
 
     $local_device = AlmanacKeys::getDeviceID();
@@ -1928,12 +1907,12 @@ final class PhabricatorRepository extends PhabricatorRepositoryDAO
 
       if ($local_device && $never_proxy) {
         if ($uri['device'] == $local_device) {
-          return null;
+          return array();
         }
       }
 
       if (isset($protocol_map[$uri['protocol']])) {
-        $results[] = new PhutilURI($uri['uri']);
+        $results[] = $uri;
       }
     }
 
@@ -1946,10 +1925,35 @@ final class PhabricatorRepository extends PhabricatorRepositoryDAO
     }
 
     if ($never_proxy) {
+      // See PHI1030. This error can arise from various device name/address
+      // mismatches which are hard to detect, so try to provide as much
+      // information as we can.
+
+      if ($writable) {
+        $request_type = pht('(This is a write request.)');
+      } else {
+        $request_type = pht('(This is a read request.)');
+      }
+
       throw new Exception(
         pht(
-          'Refusing to proxy a repository request from a cluster host. '.
-          'Cluster hosts must correctly route their intracluster requests.'));
+          'This repository request (for repository "%s") has been '.
+          'incorrectly routed to a cluster host (with device name "%s", '.
+          'and hostname "%s") which can not serve the request.'.
+          "\n\n".
+          'The Almanac device address for the correct device may improperly '.
+          'point at this host, or the "device.id" configuration file on '.
+          'this host may be incorrect.'.
+          "\n\n".
+          'Requests routed within the cluster by Phabricator are always '.
+          'expected to be sent to a node which can serve the request. To '.
+          'prevent loops, this request will not be proxied again.'.
+          "\n\n".
+          "%s",
+          $this->getDisplayName(),
+          $local_device,
+          php_uname('n'),
+          $request_type));
     }
 
     if (count($results) > 1) {
@@ -1964,13 +1968,115 @@ final class PhabricatorRepository extends PhabricatorRepositoryDAO
       }
     }
 
-    shuffle($results);
-    return head($results);
+    $refs = array();
+    foreach ($results as $result) {
+      $refs[] = DiffusionServiceRef::newFromDictionary($result);
+    }
+
+    // If we require a writable device, remove URIs which aren't writable.
+    if ($writable) {
+      foreach ($refs as $key => $ref) {
+        if (!$ref->isWritable()) {
+          unset($results[$key]);
+        }
+      }
+
+      if (!$refs) {
+        throw new Exception(
+          pht(
+            'This repository ("%s") is not writable with the given '.
+            'protocols (%s). The Almanac service for this repository has no '.
+            'writable bindings that support these protocols.',
+            $this->getDisplayName(),
+            implode(', ', $protocols)));
+      }
+    }
+
+    if ($writable) {
+      $refs = $this->sortWritableAlmanacServiceRefs($refs);
+    } else {
+      $refs = $this->sortReadableAlmanacServiceRefs($refs);
+    }
+
+    return array_values($refs);
+  }
+
+  private function sortReadableAlmanacServiceRefs(array $refs) {
+    assert_instances_of($refs, 'DiffusionServiceRef');
+    shuffle($refs);
+    return $refs;
+  }
+
+  private function sortWritableAlmanacServiceRefs(array $refs) {
+    assert_instances_of($refs, 'DiffusionServiceRef');
+
+    // See T13109 for discussion of how this method routes requests.
+
+    // In the absence of other rules, we'll send traffic to devices randomly.
+    // We also want to select randomly among nodes which are equally good
+    // candidates to receive the write, and accomplish that by shuffling the
+    // list up front.
+    shuffle($refs);
+
+    $order = array();
+
+    // If some device is currently holding the write lock, send all requests
+    // to that device. We're trying to queue writes on a single device so they
+    // do not need to wait for read synchronization after earlier writes
+    // complete.
+    $writer = PhabricatorRepositoryWorkingCopyVersion::loadWriter(
+      $this->getPHID());
+    if ($writer) {
+      $device_phid = $writer->getWriteProperty('devicePHID');
+      foreach ($refs as $key => $ref) {
+        if ($ref->getDevicePHID() === $device_phid) {
+          $order[] = $key;
+        }
+      }
+    }
+
+    // If no device is currently holding the write lock, try to send requests
+    // to a device which is already up to date and will not need to synchronize
+    // before it can accept the write.
+    $versions = PhabricatorRepositoryWorkingCopyVersion::loadVersions(
+      $this->getPHID());
+    if ($versions) {
+      $max_version = (int)max(mpull($versions, 'getRepositoryVersion'));
+
+      $max_devices = array();
+      foreach ($versions as $version) {
+        if ($version->getRepositoryVersion() == $max_version) {
+          $max_devices[] = $version->getDevicePHID();
+        }
+      }
+      $max_devices = array_fuse($max_devices);
+
+      foreach ($refs as $key => $ref) {
+        if (isset($max_devices[$ref->getDevicePHID()])) {
+          $order[] = $key;
+        }
+      }
+    }
+
+    // Reorder the results, putting any we've selected as preferred targets for
+    // the write at the head of the list.
+    $refs = array_select_keys($refs, $order) + $refs;
+
+    return $refs;
   }
 
   public function supportsSynchronization() {
     // TODO: For now, this is only supported for Git.
     if (!$this->isGit()) {
+      return false;
+    }
+
+    return true;
+  }
+
+
+  public function supportsRefs() {
+    if ($this->isSVN()) {
       return false;
     }
 
@@ -1984,7 +2090,14 @@ final class PhabricatorRepository extends PhabricatorRepositoryDAO
     }
 
     $repository_phid = $this->getPHID();
-    return "diffusion.repository({$repository_phid}).service({$service_phid})";
+
+    $parts = array(
+      "repo({$repository_phid})",
+      "serv({$service_phid})",
+      'v4',
+    );
+
+    return implode('.', $parts);
   }
 
   private function buildAlmanacServiceURIs() {
@@ -2008,11 +2121,14 @@ final class PhabricatorRepository extends PhabricatorRepositoryDAO
       $uri = $this->getClusterRepositoryURIFromBinding($binding);
       $protocol = $uri->getProtocol();
       $device_name = $iface->getDevice()->getName();
+      $device_phid = $iface->getDevice()->getPHID();
 
       $uris[] = array(
         'protocol' => $protocol,
         'uri' => (string)$uri,
         'device' => $device_name,
+        'writable' => (bool)$binding->getAlmanacPropertyValue('writable'),
+        'devicePHID' => $device_phid,
       );
     }
 
@@ -2060,10 +2176,16 @@ final class PhabricatorRepository extends PhabricatorRepositoryDAO
 
     $uri = $this->getAlmanacServiceURI(
       $viewer,
-      $never_proxy,
       array(
-        'http',
-        'https',
+        'neverProxy' => $never_proxy,
+        'protocols' => array(
+          'http',
+          'https',
+        ),
+
+        // At least today, no Conduit call can ever write to a repository,
+        // so it's fine to send anything to a read-only node.
+        'writable' => false,
       ));
     if ($uri === null) {
       return null;
@@ -2127,7 +2249,7 @@ final class PhabricatorRepository extends PhabricatorRepositoryDAO
     if ($this->isGit()) {
       // $_ENV does not populate in CLI contexts if "E" is missing from
       // "variables_order" in PHP config. Currently, we do not require this
-      // to be configured. Since it may not be, explictitly bring expected Git
+      // to be configured. Since it may not be, explicitly bring expected Git
       // environmental variables into scope. This list is not exhaustive, but
       // only lists variables with a known impact on commit hook behavior.
 
@@ -2174,6 +2296,35 @@ final class PhabricatorRepository extends PhabricatorRepositoryDAO
 
   public function supportsBranchComparison() {
     return $this->isGit();
+  }
+
+  public function isReadOnly() {
+    return (bool)$this->getDetail('read-only');
+  }
+
+  public function setReadOnly($read_only) {
+    return $this->setDetail('read-only', $read_only);
+  }
+
+  public function getReadOnlyMessage() {
+    return $this->getDetail('read-only-message');
+  }
+
+  public function setReadOnlyMessage($message) {
+    return $this->setDetail('read-only-message', $message);
+  }
+
+  public function getReadOnlyMessageForDisplay() {
+    $parts = array();
+    $parts[] = pht(
+      'This repository is currently in read-only maintenance mode.');
+
+    $message = $this->getReadOnlyMessage();
+    if ($message !== null) {
+      $parts[] = $message;
+    }
+
+    return implode("\n\n", $parts);
   }
 
 /* -(  Repository URIs  )---------------------------------------------------- */
@@ -2438,19 +2589,8 @@ final class PhabricatorRepository extends PhabricatorRepositoryDAO
     return new PhabricatorRepositoryEditor();
   }
 
-  public function getApplicationTransactionObject() {
-    return $this;
-  }
-
   public function getApplicationTransactionTemplate() {
     return new PhabricatorRepositoryTransaction();
-  }
-
-  public function willRenderTimeline(
-    PhabricatorApplicationTransactionView $timeline,
-    AphrontRequest $request) {
-
-    return $timeline;
   }
 
 
@@ -2557,6 +2697,14 @@ final class PhabricatorRepository extends PhabricatorRepositoryDAO
   }
 
 
+/* -(  PhabricatorDestructibleCodexInterface  )------------------------------ */
+
+
+  public function newDestructibleCodex() {
+    return new PhabricatorRepositoryDestructibleCodex();
+  }
+
+
 /* -(  PhabricatorSpacesInterface  )----------------------------------------- */
 
 
@@ -2596,10 +2744,31 @@ final class PhabricatorRepository extends PhabricatorRepositoryDAO
         ->setDescription(
           pht(
             'True if the repository is importing initial commits.')),
+      id(new PhabricatorConduitSearchFieldSpecification())
+        ->setKey('almanacServicePHID')
+        ->setType('phid?')
+        ->setDescription(
+          pht(
+            'The Almanac Service that hosts this repository, if the '.
+            'repository is clustered.')),
+      id(new PhabricatorConduitSearchFieldSpecification())
+        ->setKey('refRules')
+        ->setType('map<string, list<string>>')
+        ->setDescription(
+          pht(
+            'The "Fetch" and "Permanent Ref" rules for this repository.')),
     );
   }
 
   public function getFieldValuesForConduit() {
+    $fetch_rules = $this->getFetchRules();
+    $track_rules = $this->getTrackOnlyRules();
+    $permanent_rules = $this->getPermanentRefRules();
+
+    $fetch_rules = $this->getStringListForConduit($fetch_rules);
+    $track_rules = $this->getStringListForConduit($track_rules);
+    $permanent_rules = $this->getStringListForConduit($permanent_rules);
+
     return array(
       'name' => $this->getName(),
       'vcs' => $this->getVersionControlSystem(),
@@ -2607,7 +2776,28 @@ final class PhabricatorRepository extends PhabricatorRepositoryDAO
       'shortName' => $this->getRepositorySlug(),
       'status' => $this->getStatus(),
       'isImporting' => (bool)$this->isImporting(),
+      'almanacServicePHID' => $this->getAlmanacServicePHID(),
+      'refRules' => array(
+        'fetchRules' => $fetch_rules,
+        'trackRules' => $track_rules,
+        'permanentRefRules' => $permanent_rules,
+      ),
     );
+  }
+
+  private function getStringListForConduit($list) {
+    if (!is_array($list)) {
+      $list = array();
+    }
+
+    foreach ($list as $key => $value) {
+      $value = (string)$value;
+      if (!strlen($value)) {
+        unset($list[$key]);
+      }
+    }
+
+    return array_values($list);
   }
 
   public function getConduitSearchAttachments() {
@@ -2622,6 +2812,14 @@ final class PhabricatorRepository extends PhabricatorRepositoryDAO
 
   public function newFulltextEngine() {
     return new PhabricatorRepositoryFulltextEngine();
+  }
+
+
+/* -(  PhabricatorFerretInterface  )----------------------------------------- */
+
+
+  public function newFerretEngine() {
+    return new PhabricatorRepositoryFerretEngine();
   }
 
 }

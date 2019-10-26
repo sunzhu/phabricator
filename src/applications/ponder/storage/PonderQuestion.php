@@ -11,7 +11,8 @@ final class PonderQuestion extends PonderDAO
     PhabricatorProjectInterface,
     PhabricatorDestructibleInterface,
     PhabricatorSpacesInterface,
-    PhabricatorFulltextInterface {
+    PhabricatorFulltextInterface,
+    PhabricatorFerretInterface {
 
   const MARKUP_FIELD_CONTENT = 'markup:content';
 
@@ -144,19 +145,8 @@ final class PonderQuestion extends PonderDAO
     return new PonderQuestionEditor();
   }
 
-  public function getApplicationTransactionObject() {
-    return $this;
-  }
-
   public function getApplicationTransactionTemplate() {
     return new PonderQuestionTransaction();
-  }
-
-  public function willRenderTimeline(
-    PhabricatorApplicationTransactionView $timeline,
-    AphrontRequest $request) {
-
-    return $timeline;
   }
 
 
@@ -191,11 +181,6 @@ final class PonderQuestion extends PonderDAO
       $this->setMailKey(Filesystem::readRandomCharacters(20));
     }
     return parent::save();
-  }
-
-  public function getOriginalTitle() {
-    // TODO: Make this actually save/return the original title.
-    return $this->getTitle();
   }
 
   public function getFullTitle() {
@@ -299,5 +284,14 @@ final class PonderQuestion extends PonderDAO
   public function newFulltextEngine() {
     return new PonderQuestionFulltextEngine();
   }
+
+
+/* -(  PhabricatorFerretInterface  )----------------------------------------- */
+
+
+  public function newFerretEngine() {
+    return new PonderQuestionFerretEngine();
+  }
+
 
 }

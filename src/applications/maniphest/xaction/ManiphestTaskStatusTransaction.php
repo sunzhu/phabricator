@@ -6,14 +6,11 @@ final class ManiphestTaskStatusTransaction
   const TRANSACTIONTYPE = 'status';
 
   public function generateOldValue($object) {
-    if ($this->isNewObject()) {
-      return null;
-    }
     return $object->getStatus();
   }
 
   public function applyInternalEffects($object, $value) {
-    $object->setStatus($value);
+    $this->updateStatus($object, $value);
   }
 
   public function shouldHide() {
@@ -25,7 +22,7 @@ final class ManiphestTaskStatusTransaction
   }
 
   public function getActionStrength() {
-    return 1.3;
+    return 130;
   }
 
   public function getActionName() {
@@ -227,6 +224,17 @@ final class ManiphestTaskStatusTransaction
       return 'indigo';
     }
 
+  }
+
+  public function getTransactionTypeForConduit($xaction) {
+    return 'status';
+  }
+
+  public function getFieldValuesForConduit($xaction, $data) {
+    return array(
+      'old' => $xaction->getOldValue(),
+      'new' => $xaction->getNewValue(),
+    );
   }
 
 }

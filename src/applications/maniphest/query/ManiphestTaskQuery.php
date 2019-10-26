@@ -23,8 +23,11 @@ final class ManiphestTaskQuery extends PhabricatorCursorPagedPolicyAwareQuery {
   private $parentTaskIDs;
   private $subtaskIDs;
   private $subtypes;
-
-  private $fullTextSearch   = '';
+  private $closedEpochMin;
+  private $closedEpochMax;
+  private $closerPHIDs;
+  private $columnPHIDs;
+  private $specificGroupByProjectPHID;
 
   private $status           = 'status-any';
   const STATUS_ANY          = 'status-any';
@@ -71,6 +74,10 @@ final class ManiphestTaskQuery extends PhabricatorCursorPagedPolicyAwareQuery {
   }
 
   public function withOwners(array $owners) {
+    if ($owners === array()) {
+      throw new Exception(pht('Empty withOwners() constraint is not valid.'));
+    }
+
     $no_owner = PhabricatorPeopleNoOwnerDatasource::FUNCTION_TOKEN;
     $any_owner = PhabricatorPeopleAnyOwnerDatasource::FUNCTION_TOKEN;
 
@@ -86,7 +93,11 @@ final class ManiphestTaskQuery extends PhabricatorCursorPagedPolicyAwareQuery {
         break;
       }
     }
-    $this->ownerPHIDs = $owners;
+
+    if ($owners) {
+      $this->ownerPHIDs = $owners;
+    }
+
     return $this;
   }
 
@@ -112,11 +123,6 @@ final class ManiphestTaskQuery extends PhabricatorCursorPagedPolicyAwareQuery {
 
   public function withSubscribers(array $subscribers) {
     $this->subscriberPHIDs = $subscribers;
-    return $this;
-  }
-
-  public function withFullTextSearch($fulltext_search) {
-    $this->fullTextSearch = $fulltext_search;
     return $this;
   }
 
@@ -186,6 +192,17 @@ final class ManiphestTaskQuery extends PhabricatorCursorPagedPolicyAwareQuery {
     return $this;
   }
 
+  public function withClosedEpochBetween($min, $max) {
+    $this->closedEpochMin = $min;
+    $this->closedEpochMax = $max;
+    return $this;
+  }
+
+  public function withCloserPHIDs(array $phids) {
+    $this->closerPHIDs = $phids;
+    return $this;
+  }
+
   public function needSubscriberPHIDs($bool) {
     $this->needSubscriberPHIDs = $bool;
     return $this;
@@ -206,6 +223,16 @@ final class ManiphestTaskQuery extends PhabricatorCursorPagedPolicyAwareQuery {
     return $this;
   }
 
+  public function withColumnPHIDs(array $column_phids) {
+    $this->columnPHIDs = $column_phids;
+    return $this;
+  }
+
+  public function withSpecificGroupByProjectPHID($project_phid) {
+    $this->specificGroupByProjectPHID = $project_phid;
+    return $this;
+  }
+
   public function newResultObject() {
     return new ManiphestTask();
   }
@@ -216,7 +243,7 @@ final class ManiphestTaskQuery extends PhabricatorCursorPagedPolicyAwareQuery {
 
     $where = $this->buildWhereClause($conn);
 
-    $group_column = '';
+    $group_column = qsprintf($conn, '');
     switch ($this->groupBy) {
       case self::GROUP_PROJECT:
         $group_column = qsprintf(
@@ -247,6 +274,7 @@ final class ManiphestTaskQuery extends PhabricatorCursorPagedPolicyAwareQuery {
         break;
     }
 
+    $data = $this->didLoadRawRows($data);
     $tasks = $task_dao->loadAllFromArray($data);
 
     switch ($this->groupBy) {
@@ -328,7 +356,6 @@ final class ManiphestTaskQuery extends PhabricatorCursorPagedPolicyAwareQuery {
 
     $where[] = $this->buildStatusWhereClause($conn);
     $where[] = $this->buildOwnerWhereClause($conn);
-    $where[] = $this->buildFullTextWhereClause($conn);
 
     if ($this->taskIDs !== null) {
       $where[] = qsprintf(
@@ -386,18 +413,32 @@ final class ManiphestTaskQuery extends PhabricatorCursorPagedPolicyAwareQuery {
         $this->dateModifiedBefore);
     }
 
+    if ($this->closedEpochMin !== null) {
+      $where[] = qsprintf(
+        $conn,
+        'task.closedEpoch >= %d',
+        $this->closedEpochMin);
+    }
+
+    if ($this->closedEpochMax !== null) {
+      $where[] = qsprintf(
+        $conn,
+        'task.closedEpoch <= %d',
+        $this->closedEpochMax);
+    }
+
+    if ($this->closerPHIDs !== null) {
+      $where[] = qsprintf(
+        $conn,
+        'task.closerPHID IN (%Ls)',
+        $this->closerPHIDs);
+    }
+
     if ($this->priorities !== null) {
       $where[] = qsprintf(
         $conn,
         'task.priority IN (%Ld)',
         $this->priorities);
-    }
-
-    if ($this->subpriorities !== null) {
-      $where[] = qsprintf(
-        $conn,
-        'task.subpriority IN (%Lf)',
-        $this->subpriorities);
     }
 
     if ($this->bridgedObjectPHIDs !== null) {
@@ -413,6 +454,98 @@ final class ManiphestTaskQuery extends PhabricatorCursorPagedPolicyAwareQuery {
         'task.subtype IN (%Ls)',
         $this->subtypes);
     }
+
+
+    if ($this->columnPHIDs !== null) {
+      $viewer = $this->getViewer();
+
+      $columns = id(new PhabricatorProjectColumnQuery())
+        ->setParentQuery($this)
+        ->setViewer($viewer)
+        ->withPHIDs($this->columnPHIDs)
+        ->execute();
+      if (!$columns) {
+        throw new PhabricatorEmptyQueryException();
+      }
+
+      // We must do board layout before we move forward because the column
+      // positions may not yet exist otherwise. An example is that newly
+      // created tasks may not yet be positioned in the backlog column.
+
+      $projects = mpull($columns, 'getProject');
+      $projects = mpull($projects, null, 'getPHID');
+
+      // The board layout engine needs to know about every object that it's
+      // going to be asked to do layout for. For now, we're just doing layout
+      // on every object on the boards. In the future, we could do layout on a
+      // smaller set of objects by using the constraints on this Query. For
+      // example, if the caller is only asking for open tasks, we only need
+      // to do layout on open tasks.
+
+      // This fetches too many objects (every type of object tagged with the
+      // project, not just tasks). We could narrow it by querying the edge
+      // table on the Maniphest side, but there's currently no way to build
+      // that query with EdgeQuery.
+      $edge_query = id(new PhabricatorEdgeQuery())
+        ->withSourcePHIDs(array_keys($projects))
+        ->withEdgeTypes(
+          array(
+            PhabricatorProjectProjectHasObjectEdgeType::EDGECONST,
+          ));
+
+      $edge_query->execute();
+      $all_phids = $edge_query->getDestinationPHIDs();
+
+      // Since we overfetched PHIDs, filter out any non-tasks we got back.
+      foreach ($all_phids as $key => $phid) {
+        if (phid_get_type($phid) !== ManiphestTaskPHIDType::TYPECONST) {
+          unset($all_phids[$key]);
+        }
+      }
+
+      // If there are no tasks on the relevant boards, this query can't
+      // possibly hit anything so we're all done.
+      $task_phids = array_fuse($all_phids);
+      if (!$task_phids) {
+        throw new PhabricatorEmptyQueryException();
+      }
+
+      // We know everything we need to know, so perform board layout.
+      $engine = id(new PhabricatorBoardLayoutEngine())
+        ->setViewer($viewer)
+        ->setFetchAllBoards(true)
+        ->setBoardPHIDs(array_keys($projects))
+        ->setObjectPHIDs($task_phids)
+        ->executeLayout();
+
+      // Find the tasks that are in the constraint columns after board layout
+      // completes.
+      $select_phids = array();
+      foreach ($columns as $column) {
+        $in_column = $engine->getColumnObjectPHIDs(
+          $column->getProjectPHID(),
+          $column->getPHID());
+        foreach ($in_column as $phid) {
+          $select_phids[$phid] = $phid;
+        }
+      }
+
+      if (!$select_phids) {
+        throw new PhabricatorEmptyQueryException();
+      }
+
+      $where[] = qsprintf(
+        $conn,
+        'task.phid IN (%Ls)',
+        $select_phids);
+    }
+
+    if ($this->specificGroupByProjectPHID !== null) {
+      $where[] = qsprintf(
+        $conn,
+        'projectGroupName.indexedObjectPHID = %s',
+        $this->specificGroupByProjectPHID);
+      }
 
     return $where;
   }
@@ -466,7 +599,7 @@ final class ManiphestTaskQuery extends PhabricatorCursorPagedPolicyAwareQuery {
         'task.ownerPHID IS NOT NULL');
     }
 
-    if ($this->ownerPHIDs) {
+    if ($this->ownerPHIDs !== null) {
       $subclause[] = qsprintf(
         $conn,
         'task.ownerPHID IN (%Ls)',
@@ -474,40 +607,10 @@ final class ManiphestTaskQuery extends PhabricatorCursorPagedPolicyAwareQuery {
     }
 
     if (!$subclause) {
-      return '';
+      return qsprintf($conn, '');
     }
 
-    return '('.implode(') OR (', $subclause).')';
-  }
-
-  private function buildFullTextWhereClause(AphrontDatabaseConnection $conn) {
-    if (!strlen($this->fullTextSearch)) {
-      return null;
-    }
-
-    // In doing a fulltext search, we first find all the PHIDs that match the
-    // fulltext search, and then use that to limit the rest of the search
-    $fulltext_query = id(new PhabricatorSavedQuery())
-      ->setEngineClassName('PhabricatorSearchApplicationSearchEngine')
-      ->setParameter('query', $this->fullTextSearch);
-
-    // NOTE: Setting this to something larger than 10,000 will raise errors in
-    // Elasticsearch, and billions of results won't fit in memory anyway.
-    $fulltext_query->setParameter('limit', 10000);
-    $fulltext_query->setParameter('types',
-      array(ManiphestTaskPHIDType::TYPECONST));
-
-    $fulltext_results = PhabricatorSearchService::executeSearch(
-      $fulltext_query);
-
-    if (empty($fulltext_results)) {
-      $fulltext_results = array(null);
-    }
-
-    return qsprintf(
-      $conn,
-      'task.phid IN (%Ls)',
-      $fulltext_results);
+    return qsprintf($conn, '%LO', $subclause);
   }
 
   protected function buildJoinClauseParts(AphrontDatabaseConnection $conn) {
@@ -521,9 +624,9 @@ final class ManiphestTaskQuery extends PhabricatorCursorPagedPolicyAwareQuery {
     $joins = array();
     if ($this->hasOpenParents !== null) {
       if ($this->hasOpenParents) {
-        $join_type = 'JOIN';
+        $join_type = qsprintf($conn, 'JOIN');
       } else {
-        $join_type = 'LEFT JOIN';
+        $join_type = qsprintf($conn, 'LEFT JOIN');
       }
 
       $joins[] = qsprintf(
@@ -544,9 +647,9 @@ final class ManiphestTaskQuery extends PhabricatorCursorPagedPolicyAwareQuery {
 
     if ($this->hasOpenSubtasks !== null) {
       if ($this->hasOpenSubtasks) {
-        $join_type = 'JOIN';
+        $join_type = qsprintf($conn, 'JOIN');
       } else {
-        $join_type = 'LEFT JOIN';
+        $join_type = qsprintf($conn, 'LEFT JOIN');
       }
 
       $joins[] = qsprintf(
@@ -639,7 +742,7 @@ final class ManiphestTaskQuery extends PhabricatorCursorPagedPolicyAwareQuery {
     return $joins;
   }
 
-  protected function buildGroupClause(AphrontDatabaseConnection $conn_r) {
+  protected function buildGroupClause(AphrontDatabaseConnection $conn) {
     $joined_multiple_rows =
       ($this->hasOpenParents !== null) ||
       ($this->hasOpenSubtasks !== null) ||
@@ -653,13 +756,13 @@ final class ManiphestTaskQuery extends PhabricatorCursorPagedPolicyAwareQuery {
     // task IDs.
     if ($joined_multiple_rows) {
       if ($joined_project_name) {
-        return 'GROUP BY task.phid, projectGroup.dst';
+        return qsprintf($conn, 'GROUP BY task.phid, projectGroup.dst');
       } else {
-        return 'GROUP BY task.phid';
+        return qsprintf($conn, 'GROUP BY task.phid');
       }
-    } else {
-      return '';
     }
+
+    return qsprintf($conn, '');
   }
 
 
@@ -734,20 +837,10 @@ final class ManiphestTaskQuery extends PhabricatorCursorPagedPolicyAwareQuery {
     return array_mergev($phids);
   }
 
-  protected function getResultCursor($result) {
-    $id = $result->getID();
-
-    if ($this->groupBy == self::GROUP_PROJECT) {
-      return rtrim($id.'.'.$result->getGroupByProjectPHID(), '.');
-    }
-
-    return $id;
-  }
-
   public function getBuiltinOrders() {
     $orders = array(
       'priority' => array(
-        'vector' => array('priority', 'subpriority', 'id'),
+        'vector' => array('priority', 'id'),
         'name' => pht('Priority'),
         'aliases' => array(self::ORDER_PRIORITY),
       ),
@@ -759,7 +852,11 @@ final class ManiphestTaskQuery extends PhabricatorCursorPagedPolicyAwareQuery {
       'outdated' => array(
         'vector' => array('-updated', '-id'),
         'name' => pht('Date Updated (Oldest First)'),
-       ),
+      ),
+      'closed' => array(
+        'vector' => array('closed', 'id'),
+        'name' => pht('Date Closed (Latest First)'),
+      ),
       'title' => array(
         'vector' => array('title', 'id'),
         'name' => pht('Title'),
@@ -778,6 +875,7 @@ final class ManiphestTaskQuery extends PhabricatorCursorPagedPolicyAwareQuery {
         'outdated',
         'newest',
         'oldest',
+        'closed',
         'title',
       )) + $orders;
 
@@ -817,52 +915,51 @@ final class ManiphestTaskQuery extends PhabricatorCursorPagedPolicyAwareQuery {
         'type' => 'string',
         'reverse' => true,
       ),
-      'subpriority' => array(
-        'table' => 'task',
-        'column' => 'subpriority',
-        'type' => 'float',
-      ),
       'updated' => array(
         'table' => 'task',
         'column' => 'dateModified',
         'type' => 'int',
       ),
+      'closed' => array(
+        'table' => 'task',
+        'column' => 'closedEpoch',
+        'type' => 'int',
+        'null' => 'tail',
+      ),
     );
   }
 
-  protected function getPagingValueMap($cursor, array $keys) {
-    $cursor_parts = explode('.', $cursor, 2);
-    $task_id = $cursor_parts[0];
-    $group_id = idx($cursor_parts, 1);
+  protected function newPagingMapFromCursorObject(
+    PhabricatorQueryCursor $cursor,
+    array $keys) {
 
-    $task = $this->loadCursorObject($task_id);
+    $task = $cursor->getObject();
 
     $map = array(
-      'id' => $task->getID(),
-      'priority' => $task->getPriority(),
-      'subpriority' => $task->getSubpriority(),
+      'id' => (int)$task->getID(),
+      'priority' => (int)$task->getPriority(),
       'owner' => $task->getOwnerOrdering(),
       'status' => $task->getStatus(),
       'title' => $task->getTitle(),
-      'updated' => $task->getDateModified(),
+      'updated' => (int)$task->getDateModified(),
+      'closed' => $task->getClosedEpoch(),
     );
 
-    foreach ($keys as $key) {
-      switch ($key) {
-        case 'project':
-          $value = null;
-          if ($group_id) {
-            $paging_projects = id(new PhabricatorProjectQuery())
-              ->setViewer($this->getViewer())
-              ->withPHIDs(array($group_id))
-              ->execute();
-            if ($paging_projects) {
-              $value = head($paging_projects)->getName();
-            }
-          }
-          $map[$key] = $value;
-          break;
+    if (isset($keys['project'])) {
+      $value = null;
+
+      $group_phid = $task->getGroupByProjectPHID();
+      if ($group_phid) {
+        $paging_projects = id(new PhabricatorProjectQuery())
+          ->setViewer($this->getViewer())
+          ->withPHIDs(array($group_phid))
+          ->execute();
+        if ($paging_projects) {
+          $value = head($paging_projects)->getName();
+        }
       }
+
+      $map['project'] = $value;
     }
 
     foreach ($keys as $key) {
@@ -873,6 +970,77 @@ final class ManiphestTaskQuery extends PhabricatorCursorPagedPolicyAwareQuery {
     }
 
     return $map;
+  }
+
+  protected function newExternalCursorStringForResult($object) {
+    $id = $object->getID();
+
+    if ($this->groupBy == self::GROUP_PROJECT) {
+      return rtrim($id.'.'.$object->getGroupByProjectPHID(), '.');
+    }
+
+    return $id;
+  }
+
+  protected function newInternalCursorFromExternalCursor($cursor) {
+    list($task_id, $group_phid) = $this->parseCursor($cursor);
+
+    $cursor_object = parent::newInternalCursorFromExternalCursor($cursor);
+
+    if ($group_phid !== null) {
+      $project = id(new PhabricatorProjectQuery())
+        ->setViewer($this->getViewer())
+        ->withPHIDs(array($group_phid))
+        ->execute();
+
+      if (!$project) {
+        $this->throwCursorException(
+          pht(
+            'Group PHID ("%s") component of cursor ("%s") is not valid.',
+            $group_phid,
+            $cursor));
+      }
+
+      $cursor_object->getObject()->attachGroupByProjectPHID($group_phid);
+    }
+
+    return $cursor_object;
+  }
+
+  protected function applyExternalCursorConstraintsToQuery(
+    PhabricatorCursorPagedPolicyAwareQuery $subquery,
+    $cursor) {
+    list($task_id, $group_phid) = $this->parseCursor($cursor);
+
+    $subquery->withIDs(array($task_id));
+
+    if ($group_phid) {
+      $subquery->setGroupBy(self::GROUP_PROJECT);
+
+      // The subquery needs to return exactly one result. If a task is in
+      // several projects, the query may naturally return several results.
+      // Specify that we want only the particular instance of the task in
+      // the specified project.
+      $subquery->withSpecificGroupByProjectPHID($group_phid);
+    }
+  }
+
+
+  private function parseCursor($cursor) {
+    // Split a "123.PHID-PROJ-abcd" cursor into a "Task ID" part and a
+    // "Project PHID" part.
+
+    $parts = explode('.', $cursor, 2);
+
+    if (count($parts) < 2) {
+      $parts[] = null;
+    }
+
+    if (!strlen($parts[1])) {
+      $parts[1] = null;
+    }
+
+    return $parts;
   }
 
   protected function getPrimaryTableAlias() {

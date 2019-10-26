@@ -13,6 +13,15 @@ final class PhabricatorProjectDetailsProfileMenuItem
     return pht('Project Details');
   }
 
+  public function getMenuItemTypeIcon() {
+    return 'fa-file-text-o';
+  }
+
+  public function canHideMenuItem(
+    PhabricatorProfileMenuItemConfiguration $config) {
+    return false;
+  }
+
   public function canMakeDefault(
     PhabricatorProfileMenuItemConfiguration $config) {
     return true;
@@ -40,7 +49,7 @@ final class PhabricatorProjectDetailsProfileMenuItem
     );
   }
 
-  protected function newNavigationMenuItems(
+  protected function newMenuItemViewList(
     PhabricatorProfileMenuItemConfiguration $config) {
 
     $project = $config->getProfileObject();
@@ -49,10 +58,10 @@ final class PhabricatorProjectDetailsProfileMenuItem
     $name = $project->getName();
     $icon = $project->getDisplayIconIcon();
 
-    $href = "/project/profile/{$id}/";
+    $uri = "/project/profile/{$id}/";
 
-    $item = $this->newItem()
-      ->setHref($href)
+    $item = $this->newItemView()
+      ->setURI($uri)
       ->setName($name)
       ->setIcon($icon);
 

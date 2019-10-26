@@ -41,16 +41,19 @@ final class PhabricatorPeopleApplication extends PhabricatorApplication {
   public function getRoutes() {
     return array(
       '/people/' => array(
-        '(query/(?P<key>[^/]+)/)?' => 'PhabricatorPeopleListController',
-        'logs/(?:query/(?P<queryKey>[^/]+)/)?'
-          => 'PhabricatorPeopleLogsController',
+        $this->getQueryRoutePattern() => 'PhabricatorPeopleListController',
+        'logs/' => array(
+          $this->getQueryRoutePattern() => 'PhabricatorPeopleLogsController',
+          '(?P<id>\d+)/' => 'PhabricatorPeopleLogViewController',
+        ),
         'invite/' => array(
           '(?:query/(?P<queryKey>[^/]+)/)?'
             => 'PhabricatorPeopleInviteListController',
           'send/'
             => 'PhabricatorPeopleInviteSendController',
         ),
-        'approve/(?P<id>[1-9]\d*)/' => 'PhabricatorPeopleApproveController',
+        'approve/(?P<id>[1-9]\d*)/(?:via/(?P<via>[^/]+)/)?'
+          => 'PhabricatorPeopleApproveController',
         '(?P<via>disapprove)/(?P<id>[1-9]\d*)/'
           => 'PhabricatorPeopleDisableController',
         '(?P<via>disable)/(?P<id>[1-9]\d*)/'
@@ -61,7 +64,6 @@ final class PhabricatorPeopleApplication extends PhabricatorApplication {
         'welcome/(?P<id>[1-9]\d*)/' => 'PhabricatorPeopleWelcomeController',
         'create/' => 'PhabricatorPeopleCreateController',
         'new/(?P<type>[^/]+)/' => 'PhabricatorPeopleNewController',
-        'ldap/' => 'PhabricatorPeopleLdapController',
         'editprofile/(?P<id>[1-9]\d*)/' =>
           'PhabricatorPeopleProfileEditController',
         'badges/(?P<id>[1-9]\d*)/' =>
@@ -76,7 +78,7 @@ final class PhabricatorPeopleApplication extends PhabricatorApplication {
           'PhabricatorPeopleProfilePictureController',
         'manage/(?P<id>[1-9]\d*)/' =>
           'PhabricatorPeopleProfileManageController',
-        ),
+      ),
       '/p/(?P<username>[\w._-]+)/' => array(
         '' => 'PhabricatorPeopleProfileViewController',
         'item/' => $this->getProfileMenuRouting(
@@ -94,6 +96,9 @@ final class PhabricatorPeopleApplication extends PhabricatorApplication {
   protected function getCustomCapabilities() {
     return array(
       PeopleCreateUsersCapability::CAPABILITY => array(
+        'default' => PhabricatorPolicies::POLICY_ADMIN,
+      ),
+      PeopleDisableUsersCapability::CAPABILITY => array(
         'default' => PhabricatorPolicies::POLICY_ADMIN,
       ),
       PeopleBrowseUserDirectoryCapability::CAPABILITY => array(),

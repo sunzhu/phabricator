@@ -112,5 +112,25 @@ final class ManiphestTaskUnblockTransaction
     return 'fa-shield';
   }
 
+  public function shouldHideForFeed() {
+    // Hide "alice created X, a task blocking Y." from feed because it
+    // will almost always appear adjacent to "alice created Y".
+    $is_new = $this->getMetadataValue('blocker.new');
+    if ($is_new) {
+      return true;
+    }
 
+    return parent::shouldHideForFeed();
+  }
+
+  public function getRequiredCapabilities(
+    $object,
+    PhabricatorApplicationTransaction $xaction) {
+
+    // When you close a task, we want to apply this transaction to its parents
+    // even if you can not edit (or even see) those parents, so don't require
+    // any capabilities. See PHI1059.
+
+    return null;
+  }
 }

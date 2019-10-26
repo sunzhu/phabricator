@@ -100,7 +100,7 @@ final class PhabricatorPasswordAuthProvider extends PhabricatorAuthProvider {
 
   public function getDescriptionForCreate() {
     return pht(
-      'Allow users to login or register using a username and password.');
+      'Allow users to log in or register using a username and password.');
   }
 
   public function getAdapter() {
@@ -159,8 +159,7 @@ final class PhabricatorPasswordAuthProvider extends PhabricatorAuthProvider {
     return $dialog;
   }
 
-  public function buildLinkForm(
-    PhabricatorAuthLinkController $controller) {
+  public function buildLinkForm($controller) {
     throw new Exception(pht("Password providers can't be linked."));
   }
 
@@ -174,8 +173,8 @@ final class PhabricatorPasswordAuthProvider extends PhabricatorAuthProvider {
     $dialog = id(new AphrontDialogView())
       ->setSubmitURI($this->getLoginURI())
       ->setUser($viewer)
-      ->setTitle(pht('Login to Phabricator'))
-      ->addSubmitButton(pht('Login'));
+      ->setTitle(pht('Log In'))
+      ->addSubmitButton(pht('Log In'));
 
     if ($this->shouldAllowRegistration()) {
       $dialog->addCancelButton(
@@ -229,6 +228,7 @@ final class PhabricatorPasswordAuthProvider extends PhabricatorAuthProvider {
         id(new AphrontFormTextControl())
           ->setLabel(pht('Username or Email'))
           ->setName('username')
+          ->setAutofocus(true)
           ->setValue($v_user)
           ->setError($e_user))
       ->appendChild(
@@ -253,14 +253,26 @@ final class PhabricatorPasswordAuthProvider extends PhabricatorAuthProvider {
 
     $request = $controller->getRequest();
     $viewer = $request->getUser();
+    $content_source = PhabricatorContentSource::newFromRequest($request);
 
+    $rate_actor = PhabricatorSystemActionEngine::newActorFromRequest($request);
+
+    PhabricatorSystemActionEngine::willTakeAction(
+      array($rate_actor),
+      new PhabricatorAuthTryPasswordAction(),
+      1);
+
+    // If the same remote address has submitted several failed login attempts
+    // recently, require they provide a CAPTCHA response for new attempts.
     $require_captcha = false;
     $captcha_valid = false;
     if (AphrontFormRecaptchaControl::isRecaptchaEnabled()) {
-      $failed_attempts = PhabricatorUserLog::loadRecentEventsFromThisIP(
-        PhabricatorUserLog::ACTION_LOGIN_FAILURE,
-        60 * 15);
-      if (count($failed_attempts) > 5) {
+      try {
+        PhabricatorSystemActionEngine::willTakeAction(
+          array($rate_actor),
+          new PhabricatorAuthTryPasswordWithoutCAPTCHAAction(),
+          1);
+      } catch (PhabricatorSystemActionRateLimitException $ex) {
         $require_captcha = true;
         $captcha_valid = AphrontFormRecaptchaControl::processCaptcha($request);
       }
@@ -285,22 +297,16 @@ final class PhabricatorPasswordAuthProvider extends PhabricatorAuthProvider {
 
           if ($user) {
             $envelope = new PhutilOpaqueEnvelope($request->getStr('password'));
-            if ($user->comparePassword($envelope)) {
+
+            $engine = id(new PhabricatorAuthPasswordEngine())
+              ->setViewer($user)
+              ->setContentSource($content_source)
+              ->setPasswordType(PhabricatorAuthPassword::PASSWORD_TYPE_ACCOUNT)
+              ->setObject($user);
+
+            if ($engine->isValidPassword($envelope)) {
               $account = $this->loadOrCreateAccount($user->getPHID());
               $log_user = $user;
-
-              // If the user's password is stored using a less-than-optimal
-              // hash, upgrade them to the strongest available hash.
-
-              $hash_envelope = new PhutilOpaqueEnvelope(
-                $user->getPasswordHash());
-              if (PhabricatorPasswordHasher::canUpgradeHash($hash_envelope)) {
-                $user->setPassword($envelope);
-
-                $unguarded = AphrontWriteGuard::beginScopedUnguardedWrites();
-                  $user->save();
-                unset($unguarded);
-              }
             }
           }
         }
@@ -312,7 +318,7 @@ final class PhabricatorPasswordAuthProvider extends PhabricatorAuthProvider {
         $log = PhabricatorUserLog::initializeNewLog(
           null,
           $log_user ? $log_user->getPHID() : null,
-          PhabricatorUserLog::ACTION_LOGIN_FAILURE);
+          PhabricatorLoginFailureUserLogType::LOGTYPE);
         $log->save();
       }
 
@@ -331,14 +337,6 @@ final class PhabricatorPasswordAuthProvider extends PhabricatorAuthProvider {
 
   public function shouldRequireRegistrationPassword() {
     return true;
-  }
-
-  public function getDefaultExternalAccount() {
-    $adapter = $this->getAdapter();
-
-    return id(new PhabricatorExternalAccount())
-      ->setAccountType($adapter->getAdapterType())
-      ->setAccountDomain($adapter->getAdapterDomain());
   }
 
   protected function willSaveAccount(PhabricatorExternalAccount $account) {

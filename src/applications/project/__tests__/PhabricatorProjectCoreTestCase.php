@@ -146,8 +146,7 @@ final class PhabricatorProjectCoreTestCase extends PhabricatorTestCase {
     $user = $this->createUser();
     $user->save();
 
-    $user2 = $this->createUser();
-    $user2->save();
+    $user->setAllowInlineCacheGeneration(true);
 
     $proj = $this->createProject($user);
 
@@ -1009,29 +1008,32 @@ final class PhabricatorProjectCoreTestCase extends PhabricatorTestCase {
       $task2->getPHID(),
       $task1->getPHID(),
     );
-    $this->assertTasksInColumn($expect, $user, $board, $column);
+    $label = pht('Simple move');
+    $this->assertTasksInColumn($expect, $user, $board, $column, $label);
 
     // Move the second task after the first task.
     $options = array(
-      'afterPHID' => $task1->getPHID(),
+      'afterPHIDs' => array($task1->getPHID()),
     );
     $this->moveToColumn($user, $board, $task2, $column, $column, $options);
     $expect = array(
       $task1->getPHID(),
       $task2->getPHID(),
     );
-    $this->assertTasksInColumn($expect, $user, $board, $column);
+    $label = pht('With afterPHIDs');
+    $this->assertTasksInColumn($expect, $user, $board, $column, $label);
 
     // Move the second task before the first task.
     $options = array(
-      'beforePHID' => $task1->getPHID(),
+      'beforePHIDs' => array($task1->getPHID()),
     );
     $this->moveToColumn($user, $board, $task2, $column, $column, $options);
     $expect = array(
       $task2->getPHID(),
       $task1->getPHID(),
     );
-    $this->assertTasksInColumn($expect, $user, $board, $column);
+    $label = pht('With beforePHIDs');
+    $this->assertTasksInColumn($expect, $user, $board, $column, $label);
   }
 
   public function testMilestoneMoves() {
@@ -1178,6 +1180,100 @@ final class PhabricatorProjectCoreTestCase extends PhabricatorTestCase {
     $this->assertTrue($can_edit);
   }
 
+  public function testProjectPolicyRules() {
+    $author = $this->generateNewTestUser();
+
+    $proj_a = PhabricatorProject::initializeNewProject($author)
+      ->setName('Policy A')
+      ->save();
+    $proj_b = PhabricatorProject::initializeNewProject($author)
+      ->setName('Policy B')
+      ->save();
+
+    $user_none = $this->generateNewTestUser();
+    $user_any = $this->generateNewTestUser();
+    $user_all = $this->generateNewTestUser();
+
+    $this->joinProject($proj_a, $user_any);
+    $this->joinProject($proj_a, $user_all);
+    $this->joinProject($proj_b, $user_all);
+
+    $any_policy = id(new PhabricatorPolicy())
+      ->setRules(
+        array(
+          array(
+            'action' => PhabricatorPolicy::ACTION_ALLOW,
+            'rule' => 'PhabricatorProjectsPolicyRule',
+            'value' => array(
+              $proj_a->getPHID(),
+              $proj_b->getPHID(),
+            ),
+          ),
+        ))
+      ->save();
+
+    $all_policy = id(new PhabricatorPolicy())
+      ->setRules(
+        array(
+          array(
+            'action' => PhabricatorPolicy::ACTION_ALLOW,
+            'rule' => 'PhabricatorProjectsAllPolicyRule',
+            'value' => array(
+              $proj_a->getPHID(),
+              $proj_b->getPHID(),
+            ),
+          ),
+        ))
+      ->save();
+
+    $any_task = ManiphestTask::initializeNewTask($author)
+      ->setViewPolicy($any_policy->getPHID())
+      ->save();
+
+    $all_task = ManiphestTask::initializeNewTask($author)
+      ->setViewPolicy($all_policy->getPHID())
+      ->save();
+
+    $map = array(
+      array(
+        pht('Project policy rule; user in no projects'),
+        $user_none,
+        false,
+        false,
+      ),
+      array(
+        pht('Project policy rule; user in some projects'),
+        $user_any,
+        true,
+        false,
+      ),
+      array(
+        pht('Project policy rule; user in all projects'),
+        $user_all,
+        true,
+        true,
+      ),
+    );
+
+    foreach ($map as $test_case) {
+      list($label, $user, $expect_any, $expect_all) = $test_case;
+
+      $can_any = PhabricatorPolicyFilter::hasCapability(
+        $user,
+        $any_task,
+        PhabricatorPolicyCapability::CAN_VIEW);
+
+      $can_all = PhabricatorPolicyFilter::hasCapability(
+        $user,
+        $all_task,
+        PhabricatorPolicyCapability::CAN_VIEW);
+
+      $this->assertEqual($expect_any, $can_any, pht('%s / Any', $label));
+      $this->assertEqual($expect_all, $can_all, pht('%s / All', $label));
+    }
+  }
+
+
   private function moveToColumn(
     PhabricatorUser $viewer,
     PhabricatorProject $board,
@@ -1240,7 +1336,8 @@ final class PhabricatorProjectCoreTestCase extends PhabricatorTestCase {
     array $expect,
     PhabricatorUser $viewer,
     PhabricatorProject $board,
-    PhabricatorProjectColumn $column) {
+    PhabricatorProjectColumn $column,
+    $label = null) {
 
     $engine = id(new PhabricatorBoardLayoutEngine())
       ->setViewer($viewer)
@@ -1253,7 +1350,7 @@ final class PhabricatorProjectCoreTestCase extends PhabricatorTestCase {
       $column->getPHID());
     $object_phids = array_values($object_phids);
 
-    $this->assertEqual($expect, $object_phids);
+    $this->assertEqual($expect, $object_phids, $label);
   }
 
   private function addColumn(
@@ -1289,12 +1386,19 @@ final class PhabricatorProjectCoreTestCase extends PhabricatorTestCase {
 
     $new_name = $proj->getName().' '.mt_rand();
 
-    $xaction = new PhabricatorProjectTransaction();
-    $xaction->setTransactionType(
-      PhabricatorProjectNameTransaction::TRANSACTIONTYPE);
-    $xaction->setNewValue($new_name);
+    $params = array(
+      'objectIdentifier' => $proj->getID(),
+      'transactions' => array(
+        array(
+          'type' => 'name',
+          'value' => $new_name,
+        ),
+      ),
+    );
 
-    $this->applyTransactions($proj, $user, array($xaction));
+    id(new ConduitCall('project.edit', $params))
+      ->setUser($user)
+      ->execute();
 
     return true;
   }

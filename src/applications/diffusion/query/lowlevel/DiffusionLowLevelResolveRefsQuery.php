@@ -195,13 +195,15 @@ final class DiffusionLowLevelResolveRefsQuery
 
       $alternate = null;
       if ($type == 'tag') {
-        $alternate = $identifier;
-        $identifier = idx($tag_map, $ref);
-        if (!$identifier) {
-          throw new Exception(
-            pht(
-              "Failed to look up tag '%s'!",
-              $ref));
+        $tag_identifier = idx($tag_map, $ref);
+        if ($tag_identifier === null) {
+          // This can happen when we're asked to resolve the hash of a "tag"
+          // object created with "git tag --annotate" that isn't currently
+          // reachable from any ref. Just leave things as they are.
+        } else {
+          // Otherwise, we have a normal named tag.
+          $alternate = $identifier;
+          $identifier = $tag_identifier;
         }
       }
 
@@ -250,6 +252,66 @@ final class DiffusionLowLevelResolveRefsQuery
       }
 
       unset($unresolved[$key]);
+    }
+
+    if (!$unresolved) {
+      return $results;
+    }
+
+    // If some of the refs look like hashes, try to bulk resolve them. This
+    // workflow happens via RefEngine and bulk resolution is dramatically
+    // faster than individual resolution. See PHI158.
+
+    $hashlike = array();
+    foreach ($unresolved as $key => $ref) {
+      if (preg_match('/^[a-f0-9]{40}\z/', $ref)) {
+        $hashlike[$key] = $ref;
+      }
+    }
+
+    if (count($hashlike) > 1) {
+      $hashlike_map = array();
+
+      $hashlike_groups = array_chunk($hashlike, 64, true);
+      foreach ($hashlike_groups as $hashlike_group) {
+        $hashlike_arg = array();
+        foreach ($hashlike_group as $hashlike_ref) {
+          $hashlike_arg[] = hgsprintf('%s', $hashlike_ref);
+        }
+        $hashlike_arg = '('.implode(' or ', $hashlike_arg).')';
+
+        list($err, $refs) = $repository->execLocalCommand(
+          'log --template=%s --rev %s',
+          '{node}\n',
+          $hashlike_arg);
+        if ($err) {
+          // NOTE: If any ref fails to resolve, Mercurial will exit with an
+          // error. We just give up on the whole group and resolve it
+          // individually below. In theory, we could split it into subgroups
+          // but the pathway where this bulk resolution matters rarely tries
+          // to resolve missing refs (see PHI158).
+          continue;
+        }
+
+        $refs = phutil_split_lines($refs, false);
+
+        foreach ($refs as $ref) {
+          $hashlike_map[$ref] = true;
+        }
+      }
+
+      foreach ($unresolved as $key => $ref) {
+        if (!isset($hashlike_map[$ref])) {
+          continue;
+        }
+
+        $results[$ref][] = array(
+          'type' => 'commit',
+          'identifier' => $ref,
+        );
+
+        unset($unresolved[$key]);
+      }
     }
 
     if (!$unresolved) {

@@ -32,11 +32,11 @@ final class DiffusionBranchListView extends DiffusionView {
 
     Javelin::initBehavior('phabricator-tooltips');
 
-    $doc_href = PhabricatorEnv::getDoclink('Diffusion User Guide: Autoclose');
     $list = id(new PHUIObjectItemListView())
-      ->setFlush(true)
       ->addClass('diffusion-history-list')
       ->addClass('diffusion-branch-list');
+
+    $publisher = $repository->newPublisher();
 
     foreach ($this->branches as $branch) {
       $build_view = null;
@@ -72,14 +72,6 @@ final class DiffusionBranchListView extends DiffusionView {
               ->setWorkflow(true)
               ->setHref($compare_uri));
         }
-      }
-
-      $fields = $branch->getRawFields();
-      $closed = idx($fields, 'closed');
-      if ($closed) {
-        $status = pht('Closed');
-      } else {
-        $status = pht('Open');
       }
 
       $browse_href = $drequest->generateURI(
@@ -125,9 +117,29 @@ final class DiffusionBranchListView extends DiffusionView {
         ));
 
       if ($branch->getShortName() == $repository->getDefaultBranch()) {
-        $item->setStatusIcon('fa-code-fork', pht('Default Branch'));
+        $item->setStatusIcon('fa-star', pht('Default Branch'));
+      } else {
+        if ($publisher->shouldPublishRef($branch)) {
+          $item->setStatusIcon('fa-code-fork', pht('Permanent Ref'));
+        } else {
+          $item->setStatusIcon(
+            'fa-folder-open-o grey', pht('Not a Permanent Ref'));
+        }
       }
+
       $item->addAttribute(array($datetime));
+
+      if ($can_close_branches) {
+        $fields = $branch->getRawFields();
+        $closed = idx($fields, 'closed');
+        if ($closed) {
+          $status = pht('Branch Closed');
+          $item->setDisabled(true);
+        } else {
+          $status = pht('Branch Open');
+        }
+        $item->addAttribute($status);
+      }
 
       $list->addItem($item);
 

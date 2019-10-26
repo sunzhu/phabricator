@@ -123,21 +123,23 @@ final class DiffusionHistoryQueryConduitAPIMethod
     // branches).
 
     if (strlen($path)) {
-      $path_arg = csprintf('-- %s', $path);
-      $branch_arg = '';
+      $path_arg = csprintf('%s', $path);
+      $revset_arg = hgsprintf(
+        'reverse(ancestors(%s))',
+        $commit_hash);
     } else {
       $path_arg = '';
-      // NOTE: --branch used to be called --only-branch; use -b for
-      // compatibility.
-      $branch_arg = csprintf('-b %s', $drequest->getBranch());
+      $revset_arg = hgsprintf(
+        'reverse(ancestors(%s)) and branch(%s)',
+        $drequest->getBranch(),
+        $commit_hash);
     }
 
     list($stdout) = $repository->execxLocalCommand(
-      'log --debug --template %s --limit %d %C --rev %s %C',
+      'log --debug --template %s --limit %d --rev %s -- %C',
       '{node};{parents}\\n',
       ($offset + $limit), // No '--skip' in Mercurial.
-      $branch_arg,
-      hgsprintf('reverse(ancestors(%s))', $commit_hash),
+      $revset_arg,
       $path_arg);
 
     $stdout = DiffusionMercurialCommandEngine::filterMercurialDebugOutput(
@@ -213,13 +215,17 @@ final class DiffusionHistoryQueryConduitAPIMethod
       return array();
     }
 
-    $filter_query = '';
+    $filter_query = qsprintf($conn_r, '');
     if ($need_direct_changes) {
       if ($need_child_changes) {
-        $type = DifferentialChangeType::TYPE_CHILD;
-        $filter_query = 'AND (isDirect = 1 OR changeType = '.$type.')';
+        $filter_query = qsprintf(
+          $conn_r,
+          'AND (isDirect = 1 OR changeType = %s)',
+          DifferentialChangeType::TYPE_CHILD);
       } else {
-        $filter_query = 'AND (isDirect = 1)';
+        $filter_query = qsprintf(
+          $conn_r,
+          'AND (isDirect = 1)');
       }
     }
 

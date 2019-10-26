@@ -11,6 +11,7 @@ final class DiffusionGraphController extends DiffusionController {
     if ($response) {
       return $response;
     }
+    require_celerity_resource('diffusion-css');
 
     $viewer = $this->getViewer();
     $drequest = $this->getDiffusionRequest();
@@ -39,7 +40,6 @@ final class DiffusionGraphController extends DiffusionController {
       ->setDiffusionRequest($drequest)
       ->setHistory($history);
 
-    $graph->loadRevisions();
     $show_graph = !strlen($drequest->getPath());
     if ($show_graph) {
       $graph->setParents($history_results['parents']);
@@ -66,6 +66,7 @@ final class DiffusionGraphController extends DiffusionController {
       ->setHeaderText(pht('History Graph'))
       ->setBackground(PHUIObjectBoxView::BLUE_PROPERTY)
       ->setTable($graph)
+      ->addClass('diffusion-mobile-view')
       ->setPager($pager);
 
     $tabs = $this->buildTabsView('graph');
@@ -83,6 +84,7 @@ final class DiffusionGraphController extends DiffusionController {
 
   private function buildHeader(DiffusionRequest $drequest) {
     $viewer = $this->getViewer();
+    $repository = $drequest->getRepository();
 
     $no_path = !strlen($drequest->getPath());
     if ($no_path) {
@@ -95,6 +97,11 @@ final class DiffusionGraphController extends DiffusionController {
       ->setUser($viewer)
       ->setHeader($header_text)
       ->setHeaderIcon('fa-code-fork');
+
+    if (!$repository->isSVN()) {
+      $branch_tag = $this->renderBranchTag($drequest);
+      $header->addTag($branch_tag);
+    }
 
     return $header;
 

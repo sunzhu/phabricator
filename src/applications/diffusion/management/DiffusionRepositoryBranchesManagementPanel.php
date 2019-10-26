@@ -23,8 +23,8 @@ final class DiffusionRepositoryBranchesManagementPanel
 
     $has_any =
       $repository->getDetail('default-branch') ||
-      $repository->getDetail('branch-filter') ||
-      $repository->getDetail('close-commits-filter');
+      $repository->getTrackOnlyRules() ||
+      $repository->getPermanentRefRules();
 
     if ($has_any) {
       return 'fa-code-fork';
@@ -36,15 +36,16 @@ final class DiffusionRepositoryBranchesManagementPanel
   protected function getEditEngineFieldKeys() {
     return array(
       'defaultBranch',
+      'fetchRefs',
+      'permanentRefs',
       'trackOnly',
-      'autocloseOnly',
     );
   }
 
   public function buildManagementPanelCurtain() {
     $repository = $this->getRepository();
     $viewer = $this->getViewer();
-    $action_list = $this->getNewActionList();
+    $action_list = $this->newActionList();
 
     $can_edit = PhabricatorPolicyFilter::hasCapability(
       $viewer,
@@ -61,37 +62,73 @@ final class DiffusionRepositoryBranchesManagementPanel
         ->setDisabled(!$can_edit)
         ->setWorkflow(!$can_edit));
 
-    return $this->getNewCurtainView($action_list);
+    $drequest = DiffusionRequest::newFromDictionary(
+      array(
+        'user' => $viewer,
+        'repository' => $repository,
+      ));
+
+    $view_uri = $drequest->generateURI(
+      array(
+        'action' => 'branches',
+      ));
+
+    $action_list->addAction(
+      id(new PhabricatorActionView())
+        ->setIcon('fa-code-fork')
+        ->setName(pht('View Branches'))
+        ->setHref($view_uri));
+
+    return $this->newCurtainView()
+      ->setActionList($action_list);
   }
 
   public function buildManagementPanelContent() {
     $repository = $this->getRepository();
     $viewer = $this->getViewer();
+    $content = array();
 
     $view = id(new PHUIPropertyListView())
       ->setViewer($viewer);
 
     $default_branch = nonempty(
-      $repository->getHumanReadableDetail('default-branch'),
+      $repository->getDetail('default-branch'),
       phutil_tag('em', array(), $repository->getDefaultBranch()));
     $view->addProperty(pht('Default Branch'), $default_branch);
 
-    $track_only = nonempty(
-      $repository->getHumanReadableDetail('branch-filter', array()),
-      phutil_tag('em', array(), pht('Track All Branches')));
-    $view->addProperty(pht('Track Only'), $track_only);
-
-    $autoclose_only = nonempty(
-      $repository->getHumanReadableDetail('close-commits-filter', array()),
-      phutil_tag('em', array(), pht('Autoclose On All Branches')));
-
-    if ($repository->getDetail('disable-autoclose')) {
-      $autoclose_only = phutil_tag('em', array(), pht('Disabled'));
+    if ($repository->supportsFetchRules()) {
+      $fetch_only = $repository->getFetchRules();
+      if ($fetch_only) {
+        $fetch_display = implode(', ', $fetch_only);
+      } else {
+        $fetch_display = phutil_tag('em', array(), pht('Fetch All Refs'));
+      }
+      $view->addProperty(pht('Fetch Refs'), $fetch_display);
     }
 
-    $view->addProperty(pht('Autoclose Only'), $autoclose_only);
+    $track_only_rules = $repository->getTrackOnlyRules();
+    if ($track_only_rules) {
+      $track_only_rules = implode(', ', $track_only_rules);
+      $view->addProperty(pht('Track Only'), $track_only_rules);
+    }
 
-    return $this->newBox(pht('Branches'), $view);
+    $publishing_disabled = $repository->isPublishingDisabled();
+    if ($publishing_disabled) {
+      $permanent_display =
+        phutil_tag('em', array(), pht('Publishing Disabled'));
+    } else {
+      $permanent_rules = $repository->getPermanentRefRules();
+      if ($permanent_rules) {
+        $permanent_display = implode(', ', $permanent_rules);
+      } else {
+        $permanent_display = phutil_tag('em', array(), pht('All Branches'));
+      }
+    }
+    $view->addProperty(pht('Permanent Refs'), $permanent_display);
+
+    $content[] = $this->newBox(pht('Branches'), $view);
+
+    return $content;
   }
 
 }

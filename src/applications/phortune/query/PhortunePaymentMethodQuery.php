@@ -34,19 +34,12 @@ final class PhortunePaymentMethodQuery
     return $this;
   }
 
+  public function newResultObject() {
+    return new PhortunePaymentMethod();
+  }
+
   protected function loadPage() {
-    $table = new PhortunePaymentMethod();
-    $conn = $table->establishConnection('r');
-
-    $rows = queryfx_all(
-      $conn,
-      'SELECT * FROM %T %Q %Q %Q',
-      $table->getTableName(),
-      $this->buildWhereClause($conn),
-      $this->buildOrderClause($conn),
-      $this->buildLimitClause($conn));
-
-    return $table->loadAllFromArray($rows);
+    return $this->loadStandardPage($this->newResultObject());
   }
 
   protected function willFilterPage(array $methods) {
@@ -60,6 +53,7 @@ final class PhortunePaymentMethodQuery
       $account = idx($accounts, $method->getAccountPHID());
       if (!$account) {
         unset($methods[$key]);
+        $this->didRejectResult($method);
         continue;
       }
       $method->attachAccount($account);
@@ -79,6 +73,7 @@ final class PhortunePaymentMethodQuery
       $merchant = idx($merchants, $method->getMerchantPHID());
       if (!$merchant) {
         unset($methods[$key]);
+        $this->didRejectResult($method);
         continue;
       }
       $method->attachMerchant($merchant);
@@ -98,6 +93,7 @@ final class PhortunePaymentMethodQuery
       $provider_config = idx($provider_configs, $method->getProviderPHID());
       if (!$provider_config) {
         unset($methods[$key]);
+        $this->didRejectResult($method);
         continue;
       }
       $method->attachProviderConfig($provider_config);
@@ -106,8 +102,8 @@ final class PhortunePaymentMethodQuery
     return $methods;
   }
 
-  protected function buildWhereClause(AphrontDatabaseConnection $conn) {
-    $where = array();
+  protected function buildWhereClauseParts(AphrontDatabaseConnection $conn) {
+    $where = parent::buildWhereClauseParts($conn);
 
     if ($this->ids !== null) {
       $where[] = qsprintf(
@@ -144,9 +140,7 @@ final class PhortunePaymentMethodQuery
         $this->statuses);
     }
 
-    $where[] = $this->buildPagingClause($conn);
-
-    return $this->formatWhereClause($where);
+    return $where;
   }
 
   public function getQueryApplicationClass() {

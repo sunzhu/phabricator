@@ -1,89 +1,69 @@
 <?php
 
-final class PhabricatorFactChartController extends PhabricatorFactController {
+final class PhabricatorFactChartController
+  extends PhabricatorFactController {
 
   public function handleRequest(AphrontRequest $request) {
     $viewer = $request->getViewer();
 
-    $table = new PhabricatorFactRaw();
-    $conn_r = $table->establishConnection('r');
-    $table_name = $table->getTableName();
-
-    $series = $request->getStr('y1');
-
-    $specs = PhabricatorFactSpec::newSpecsForFactTypes(
-      PhabricatorFactEngine::loadAllEngines(),
-      array($series));
-    $spec = idx($specs, $series);
-
-    $data = queryfx_all(
-      $conn_r,
-      'SELECT valueX, epoch FROM %T WHERE factType = %s ORDER BY epoch ASC',
-      $table_name,
-      $series);
-
-    $points = array();
-    $sum = 0;
-    foreach ($data as $key => $row) {
-      $sum += (int)$row['valueX'];
-      $points[(int)$row['epoch']] = $sum;
+    $chart_key = $request->getURIData('chartKey');
+    if (!$chart_key) {
+      return new Aphront404Response();
     }
 
-    if (!$points) {
-      throw new Exception('No data to show!');
+    $engine = id(new PhabricatorChartRenderingEngine())
+      ->setViewer($viewer);
+
+    $chart = $engine->loadChart($chart_key);
+    if (!$chart) {
+      return new Aphront404Response();
     }
 
-    // Limit amount of data passed to browser.
-    $count = count($points);
-    $limit = 2000;
-    if ($count > $limit) {
-      $i = 0;
-      $every = ceil($count / $limit);
-      foreach ($points as $epoch => $sum) {
-        $i++;
-        if ($i % $every && $i != $count) {
-          unset($points[$epoch]);
-        }
+    // When drawing a chart, we send down a placeholder piece of HTML first,
+    // then fetch the data via async request. Determine if we're drawing
+    // the structure or actually pulling the data.
+    $mode = $request->getURIData('mode');
+    $is_draw_mode = ($mode === 'draw');
+
+    $want_data = $is_draw_mode;
+
+    // In developer mode, always pull the data in the main request. We'll
+    // throw it away if we're just drawing the chart frame, but this currently
+    // makes errors quite a bit easier to debug.
+    if (PhabricatorEnv::getEnvConfig('phabricator.developer-mode')) {
+      $want_data = true;
+    }
+
+    if ($want_data) {
+      $chart_data = $engine->newChartData();
+      if ($is_draw_mode) {
+        return id(new AphrontAjaxResponse())->setContent($chart_data);
       }
     }
 
-    $x = array_keys($points);
-    $y = array_values($points);
+    $chart_view = $engine->newChartView();
 
-    $id = celerity_generate_unique_node_id();
-    $chart = phutil_tag(
-      'div',
-      array(
-        'id' => $id,
-        'style' => 'background: #ffffff; '.
-                   'height: 480px; ',
-      ),
-      '');
+    return $this->newChartResponse($chart_view);
+  }
 
-    require_celerity_resource('d3');
-
-    Javelin::initBehavior('line-chart', array(
-      'hardpoint' => $id,
-      'x' => array($x),
-      'y' => array($y),
-      'xformat' => 'epoch',
-      'colors' => array('#0000ff'),
-    ));
-
+  private function newChartResponse($chart_view) {
     $box = id(new PHUIObjectBoxView())
-      ->setHeaderText(pht('Count of %s', $spec->getName()))
-      ->appendChild($chart);
+      ->setHeaderText(pht('Chart'))
+      ->appendChild($chart_view);
 
-    $crumbs = $this->buildApplicationCrumbs();
-    $crumbs->addTextCrumb(pht('Chart'));
+    $crumbs = $this->buildApplicationCrumbs()
+      ->addTextCrumb(pht('Chart'))
+      ->setBorder(true);
 
     $title = pht('Chart');
 
     return $this->newPage()
       ->setTitle($title)
       ->setCrumbs($crumbs)
-      ->appendChild($box);
-
+      ->appendChild(
+        array(
+          $box,
+        ));
   }
 
 }

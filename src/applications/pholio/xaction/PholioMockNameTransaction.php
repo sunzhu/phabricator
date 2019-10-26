@@ -10,14 +10,11 @@ final class PholioMockNameTransaction
   }
 
   public function getActionStrength() {
-    return 1.4;
+    return 140;
   }
 
   public function applyInternalEffects($object, $value) {
     $object->setName($value);
-    if ($object->getOriginalName() === null) {
-      $object->setOriginalName($this->getNewValue());
-    }
   }
 
   public function getTitle() {

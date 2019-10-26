@@ -315,6 +315,10 @@
   background-color: {$violet};
 }
 
+.phui-timeline-icon-fill-pink {
+  background-color: {$pink};
+}
+
 .phui-timeline-icon-fill-grey {
   background-color: #888;
 }
@@ -384,10 +388,6 @@
 
 .phui-timeline-menu:focus {
   outline: none;
-}
-
-.phui-timeline-menu .phui-icon-view {
-  color: {$lightgreytext};
 }
 
 a.phui-timeline-menu .phui-icon-view {

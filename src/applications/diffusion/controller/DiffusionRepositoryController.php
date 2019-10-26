@@ -31,8 +31,6 @@ final class DiffusionRepositoryController extends DiffusionController {
     $description = $this->buildDescriptionView($repository);
     $locate_file = $this->buildLocateFile();
 
-    $header->setActionList($actions);
-
     // Before we do any work, make sure we're looking at a some content: we're
     // on a valid branch, and the repository is not empty.
     $page_has_content = false;
@@ -48,8 +46,20 @@ final class DiffusionRepositoryController extends DiffusionController {
         ->withRepositoryPHIDs(array($repository->getPHID()))
         ->withRefTypes(array(PhabricatorRepositoryRefCursor::TYPE_BRANCH))
         ->withRefNames(array($drequest->getBranch()))
+        ->needPositions(true)
         ->execute();
-      if ($ref_cursors) {
+
+      // It's possible that this branch previously existed, but has been
+      // deleted. Make sure we have valid cursor positions, not just cursors.
+      $any_positions = false;
+      foreach ($ref_cursors as $ref_cursor) {
+        if ($ref_cursor->getPositions()) {
+          $any_positions = true;
+          break;
+        }
+      }
+
+      if ($any_positions) {
         // This is a valid branch, so we necessarily have some content.
         $page_has_content = true;
       } else {
@@ -100,7 +110,7 @@ final class DiffusionRepositoryController extends DiffusionController {
         ->setErrors(array($empty_message));
     }
 
-    $tabs = $this->buildTabsView('home');
+    $tabs = $this->buildTabsView('code');
 
     $clone_uri = $drequest->generateURI(
       array(
@@ -113,6 +123,15 @@ final class DiffusionRepositoryController extends DiffusionController {
       $clone_text = pht('Clone');
     }
 
+    $actions_button = id(new PHUIButtonView())
+      ->setTag('a')
+      ->setText(pht('Actions'))
+      ->setIcon('fa-bars')
+      ->addClass('mmr')
+      ->setColor(PHUIButtonView::GREY)
+      ->setDropdown(true)
+      ->setDropdownMenu($actions);
+
     $clone_button = id(new PHUIButtonView())
       ->setTag('a')
       ->setText($clone_text)
@@ -123,16 +142,29 @@ final class DiffusionRepositoryController extends DiffusionController {
 
     $bar = id(new PHUILeftRightView())
       ->setLeft($locate_file)
-      ->setRight(array($this->branchButton, $clone_button))
+      ->setRight(array($this->branchButton, $actions_button, $clone_button))
       ->addClass('diffusion-action-bar');
+
+    $status_view = null;
+    if ($repository->isReadOnly()) {
+      $status_view = id(new PHUIInfoView())
+        ->setSeverity(PHUIInfoView::SEVERITY_WARNING)
+        ->setErrors(
+          array(
+            phutil_escape_html_newlines(
+              $repository->getReadOnlyMessageForDisplay()),
+          ));
+    }
 
     $view = id(new PHUITwoColumnView())
       ->setHeader($header)
-      ->setFooter(array(
-        $bar,
-        $description,
-        $content,
-      ));
+      ->setFooter(
+        array(
+          $status_view,
+          $bar,
+          $description,
+          $content,
+        ));
 
     if ($page_has_content) {
       $view->setTabs($tabs);
@@ -293,6 +325,9 @@ final class DiffusionRepositoryController extends DiffusionController {
 
   private function buildHeaderView(PhabricatorRepository $repository) {
     $viewer = $this->getViewer();
+    $drequest = $this->getDiffusionRequest();
+    $search = $this->renderSearchForm();
+
     $header = id(new PHUIHeaderView())
       ->setHeader($repository->getName())
       ->setUser($viewer)
@@ -300,10 +335,13 @@ final class DiffusionRepositoryController extends DiffusionController {
       ->setProfileHeader(true)
       ->setImage($repository->getProfileImageURI())
       ->setImageEditURL('/diffusion/picture/'.$repository->getID().'/')
+      ->addActionItem($search)
       ->addClass('diffusion-profile-header');
 
     if (!$repository->isTracked()) {
       $header->setStatus('fa-ban', 'dark', pht('Inactive'));
+    } else if ($repository->isReadOnly()) {
+      $header->setStatus('fa-wrench', 'indigo', pht('Under Maintenance'));
     } else if ($repository->isImporting()) {
       $ratio = $repository->loadImportProgress();
       $percentage = sprintf('%.2f%%', 100 * $ratio);
@@ -311,8 +349,18 @@ final class DiffusionRepositoryController extends DiffusionController {
         'fa-clock-o',
         'indigo',
         pht('Importing (%s)...', $percentage));
+    } else if ($repository->isPublishingDisabled()) {
+      $header->setStatus('fa-minus', 'bluegrey', pht('Publishing Disabled'));
     } else {
       $header->setStatus('fa-check', 'bluegrey', pht('Active'));
+    }
+
+    if (!$repository->isSVN()) {
+      $default = $repository->getDefaultBranch();
+      if ($default != $drequest->getBranch()) {
+        $branch_tag = $this->renderBranchTag($drequest);
+        $header->addTag($branch_tag);
+      }
     }
 
     return $header;
@@ -334,14 +382,32 @@ final class DiffusionRepositoryController extends DiffusionController {
 
     if ($repository->isHosted()) {
       $push_uri = $this->getApplicationURI(
-        'pushlog/?repositories='.$repository->getMonogram());
+        'pushlog/?repositories='.$repository->getPHID());
 
       $action_view->addAction(
         id(new PhabricatorActionView())
           ->setName(pht('View Push Logs'))
-          ->setIcon('fa-list-alt')
+          ->setIcon('fa-upload')
           ->setHref($push_uri));
+
+      $pull_uri = $this->getApplicationURI(
+        'synclog/?repositories='.$repository->getPHID());
+
+      $action_view->addAction(
+        id(new PhabricatorActionView())
+          ->setName(pht('View Sync Logs'))
+          ->setIcon('fa-exchange')
+          ->setHref($pull_uri));
     }
+
+    $pull_uri = $this->getApplicationURI(
+      'pulllog/?repositories='.$repository->getPHID());
+
+    $action_view->addAction(
+      id(new PhabricatorActionView())
+        ->setName(pht('View Pull Logs'))
+        ->setIcon('fa-download')
+        ->setHref($pull_uri));
 
     return $action_view;
   }
@@ -389,19 +455,16 @@ final class DiffusionRepositoryController extends DiffusionController {
     $history_table = id(new DiffusionHistoryTableView())
       ->setUser($viewer)
       ->setDiffusionRequest($drequest)
-      ->setHistory($history);
-
-    // TODO: Super sketchy.
-    $history_table->loadRevisions();
+      ->setHistory($history)
+      ->setIsHead(true);
 
     if ($history_results) {
       $history_table->setParents($history_results['parents']);
     }
 
-    $history_table->setIsHead(true);
-
     $panel = id(new PHUIObjectBoxView())
-      ->setBackground(PHUIObjectBoxView::BLUE_PROPERTY);
+      ->setBackground(PHUIObjectBoxView::BLUE_PROPERTY)
+      ->addClass('diffusion-mobile-view');
     $header = id(new PHUIHeaderView())
       ->setHeader(pht('Recent Commits'));
     $panel->setHeader($header);
@@ -546,10 +609,25 @@ final class DiffusionRepositoryController extends DiffusionController {
     $browse_uri = $drequest->generateURI(array('action' => 'browse'));
     $pager->setURI($browse_uri, 'offset');
 
+    $repository_name = $repository->getName();
+    $branch_name = $drequest->getBranch();
+    if (strlen($branch_name)) {
+      $repository_name .= ' ('.$branch_name.')';
+    }
+
+    $header = phutil_tag(
+      'a',
+      array(
+        'href' => $browse_uri,
+        'class' => 'diffusion-view-browse-header',
+      ),
+      $repository_name);
+
     return id(new PHUIObjectBoxView())
-      ->setHeaderText($repository->getName())
+      ->setHeaderText($header)
       ->setBackground(PHUIObjectBoxView::BLUE_PROPERTY)
       ->setTable($browse_table)
+      ->addClass('diffusion-mobile-view')
       ->setPager($pager);
   }
 

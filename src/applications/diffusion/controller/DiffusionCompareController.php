@@ -15,6 +15,7 @@ final class DiffusionCompareController extends DiffusionController {
     $viewer = $this->getViewer();
     $drequest = $this->getDiffusionRequest();
     $repository = $drequest->getRepository();
+    require_celerity_resource('diffusion-css');
 
     if (!$repository->supportsBranchComparison()) {
       return $this->newDialog()
@@ -298,11 +299,7 @@ final class DiffusionCompareController extends DiffusionController {
     $history_table = id(new DiffusionHistoryTableView())
       ->setUser($viewer)
       ->setDiffusionRequest($drequest)
-      ->setHistory($history);
-
-    $history_table->loadRevisions();
-
-    $history_table
+      ->setHistory($history)
       ->setParents($results['parents'])
       ->setFilterParents(true)
       ->setIsHead(!$pager->getOffset())
@@ -315,6 +312,7 @@ final class DiffusionCompareController extends DiffusionController {
       ->setHeader($header)
       ->setBackground(PHUIObjectBoxView::BLUE_PROPERTY)
       ->setTable($history_table)
+      ->addClass('diffusion-mobile-view')
       ->setPager($pager);
 
   }

@@ -4,7 +4,8 @@ final class HarbormasterBuild extends HarbormasterDAO
   implements
     PhabricatorApplicationTransactionInterface,
     PhabricatorPolicyInterface,
-    PhabricatorConduitResultInterface {
+    PhabricatorConduitResultInterface,
+    PhabricatorDestructibleInterface {
 
   protected $buildablePHID;
   protected $buildPlanPHID;
@@ -108,9 +109,7 @@ final class HarbormasterBuild extends HarbormasterDAO
   }
 
   public function isBuilding() {
-    return
-      $this->getBuildStatus() === HarbormasterBuildStatus::STATUS_PENDING ||
-      $this->getBuildStatus() === HarbormasterBuildStatus::STATUS_BUILDING;
+    return $this->getBuildStatusObject()->isBuilding();
   }
 
   public function isAutobuild() {
@@ -173,18 +172,33 @@ final class HarbormasterBuild extends HarbormasterDAO
   }
 
   public function isComplete() {
-    return in_array(
-      $this->getBuildStatus(),
-      HarbormasterBuildStatus::getCompletedStatusConstants());
+    return $this->getBuildStatusObject()->isComplete();
   }
 
   public function isPaused() {
-    return ($this->getBuildStatus() == HarbormasterBuildStatus::STATUS_PAUSED);
+    return $this->getBuildStatusObject()->isPaused();
+  }
+
+  public function isPassed() {
+    return $this->getBuildStatusObject()->isPassed();
+  }
+
+  public function isFailed() {
+    return $this->getBuildStatusObject()->isFailed();
   }
 
   public function getURI() {
     $id = $this->getID();
     return "/harbormaster/build/{$id}/";
+  }
+
+  protected function getBuildStatusObject() {
+    $status_key = $this->getBuildStatus();
+    return HarbormasterBuildStatus::newBuildStatusObject($status_key);
+  }
+
+  public function getObjectName() {
+    return pht('Build %d', $this->getID());
   }
 
 
@@ -201,11 +215,60 @@ final class HarbormasterBuild extends HarbormasterDAO
   }
 
   public function canRestartBuild() {
-    if ($this->isAutobuild()) {
+    try {
+      $this->assertCanRestartBuild();
+      return true;
+    } catch (HarbormasterRestartException $ex) {
       return false;
     }
+  }
 
-    return !$this->isRestarting();
+  public function assertCanRestartBuild() {
+    if ($this->isAutobuild()) {
+      throw new HarbormasterRestartException(
+        pht('Can Not Restart Autobuild'),
+        pht(
+          'This build can not be restarted because it is an automatic '.
+          'build.'));
+    }
+
+    $restartable = HarbormasterBuildPlanBehavior::BEHAVIOR_RESTARTABLE;
+    $plan = $this->getBuildPlan();
+
+    $option = HarbormasterBuildPlanBehavior::getBehavior($restartable)
+      ->getPlanOption($plan);
+    $option_key = $option->getKey();
+
+    $never_restartable = HarbormasterBuildPlanBehavior::RESTARTABLE_NEVER;
+    $is_never = ($option_key === $never_restartable);
+    if ($is_never) {
+      throw new HarbormasterRestartException(
+        pht('Build Plan Prevents Restart'),
+        pht(
+          'This build can not be restarted because the build plan is '.
+          'configured to prevent the build from restarting.'));
+    }
+
+    $failed_restartable = HarbormasterBuildPlanBehavior::RESTARTABLE_IF_FAILED;
+    $is_failed = ($option_key === $failed_restartable);
+    if ($is_failed) {
+      if (!$this->isFailed()) {
+        throw new HarbormasterRestartException(
+          pht('Only Restartable if Failed'),
+          pht(
+            'This build can not be restarted because the build plan is '.
+            'configured to prevent the build from restarting unless it '.
+            'has failed, and it has not failed.'));
+      }
+    }
+
+    if ($this->isRestarting()) {
+      throw new HarbormasterRestartException(
+        pht('Already Restarting'),
+        pht(
+          'This build is already restarting. You can not reissue a restart '.
+          'command to a restarting build.'));
+    }
   }
 
   public function canPauseBuild() {
@@ -324,14 +387,17 @@ final class HarbormasterBuild extends HarbormasterDAO
   }
 
   public function assertCanIssueCommand(PhabricatorUser $viewer, $command) {
-    $need_edit = false;
+    $plan = $this->getBuildPlan();
+
+    $need_edit = true;
     switch ($command) {
       case HarbormasterBuildCommand::COMMAND_RESTART:
-        break;
       case HarbormasterBuildCommand::COMMAND_PAUSE:
       case HarbormasterBuildCommand::COMMAND_RESUME:
       case HarbormasterBuildCommand::COMMAND_ABORT:
-        $need_edit = true;
+        if ($plan->canRunWithoutEditCapability()) {
+          $need_edit = false;
+        }
         break;
       default:
         throw new Exception(
@@ -345,9 +411,38 @@ final class HarbormasterBuild extends HarbormasterDAO
     if ($need_edit) {
       PhabricatorPolicyFilter::requireCapability(
         $viewer,
-        $this->getBuildPlan(),
+        $plan,
         PhabricatorPolicyCapability::CAN_EDIT);
     }
+  }
+
+  public function sendMessage(PhabricatorUser $viewer, $command) {
+    // TODO: This should not be an editor transaction, but there are plans to
+    // merge BuildCommand into BuildMessage which should moot this. As this
+    // exists today, it can race against BuildEngine.
+
+    // This is a bogus content source, but this whole flow should be obsolete
+    // soon.
+    $content_source = PhabricatorContentSource::newForSource(
+      PhabricatorConsoleContentSource::SOURCECONST);
+
+    $editor = id(new HarbormasterBuildTransactionEditor())
+      ->setActor($viewer)
+      ->setContentSource($content_source)
+      ->setContinueOnNoEffect(true)
+      ->setContinueOnMissingFields(true);
+
+    $viewer_phid = $viewer->getPHID();
+    if (!$viewer_phid) {
+      $acting_phid = id(new PhabricatorHarbormasterApplication())->getPHID();
+      $editor->setActingAsPHID($acting_phid);
+    }
+
+    $xaction = id(new HarbormasterBuildTransaction())
+      ->setTransactionType(HarbormasterBuildTransaction::TYPE_COMMAND)
+      ->setNewValue($command);
+
+    $editor->applyTransactions($this, array($xaction));
   }
 
 
@@ -358,19 +453,8 @@ final class HarbormasterBuild extends HarbormasterDAO
     return new HarbormasterBuildTransactionEditor();
   }
 
-  public function getApplicationTransactionObject() {
-    return $this;
-  }
-
   public function getApplicationTransactionTemplate() {
     return new HarbormasterBuildTransaction();
-  }
-
-  public function willRenderTimeline(
-    PhabricatorApplicationTransactionView $timeline,
-    AphrontRequest $request) {
-
-    return $timeline;
   }
 
 
@@ -435,6 +519,8 @@ final class HarbormasterBuild extends HarbormasterDAO
       'buildStatus' => array(
         'value' => $status,
         'name' => HarbormasterBuildStatus::getBuildStatusName($status),
+        'color.ansi' =>
+          HarbormasterBuildStatus::getBuildStatusANSIColor($status),
       ),
       'initiatorPHID' => nonempty($this->getInitiatorPHID(), null),
       'name' => $this->getName(),
@@ -447,5 +533,34 @@ final class HarbormasterBuild extends HarbormasterDAO
         ->setAttachmentKey('querybuilds'),
     );
   }
+
+
+/* -(  PhabricatorDestructibleInterface  )----------------------------------- */
+
+  public function destroyObjectPermanently(
+    PhabricatorDestructionEngine $engine) {
+    $viewer = $engine->getViewer();
+
+    $this->openTransaction();
+      $targets = id(new HarbormasterBuildTargetQuery())
+        ->setViewer($viewer)
+        ->withBuildPHIDs(array($this->getPHID()))
+        ->execute();
+      foreach ($targets as $target) {
+        $engine->destroyObject($target);
+      }
+
+      $messages = id(new HarbormasterBuildMessageQuery())
+        ->setViewer($viewer)
+        ->withReceiverPHIDs(array($this->getPHID()))
+        ->execute();
+      foreach ($messages as $message) {
+        $engine->destroyObject($message);
+      }
+
+      $this->delete();
+    $this->saveTransaction();
+  }
+
 
 }

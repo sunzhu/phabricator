@@ -51,18 +51,7 @@ final class HarbormasterBuildActionController
     }
 
     if ($request->isDialogFormPost() && $can_issue) {
-      $editor = id(new HarbormasterBuildTransactionEditor())
-        ->setActor($viewer)
-        ->setContentSourceFromRequest($request)
-        ->setContinueOnNoEffect(true)
-        ->setContinueOnMissingFields(true);
-
-      $xaction = id(new HarbormasterBuildTransaction())
-        ->setTransactionType(HarbormasterBuildTransaction::TYPE_COMMAND)
-        ->setNewValue($action);
-
-      $editor->applyTransactions($build, array($xaction));
-
+      $build->sendMessage($viewer, $action);
       return id(new AphrontRedirectResponse())->setURI($return_uri);
     }
 
@@ -76,13 +65,12 @@ final class HarbormasterBuildActionController
             'restart build?');
           $submit = pht('Restart Build');
         } else {
-          $title = pht('Unable to Restart Build');
-          if ($build->isRestarting()) {
-            $body = pht(
-              'This build is already restarting. You can not reissue a '.
-              'restart command to a restarting build.');
-          } else {
-            $body = pht('You can not restart this build.');
+          try {
+            $build->assertCanRestartBuild();
+            throw new Exception(pht('Expected to be unable to restart build.'));
+          } catch (HarbormasterRestartException $ex) {
+            $title = $ex->getTitle();
+            $body = $ex->getBody();
           }
         }
         break;
@@ -146,8 +134,7 @@ final class HarbormasterBuildActionController
         break;
     }
 
-    $dialog = id(new AphrontDialogView())
-      ->setUser($viewer)
+    $dialog = $this->newDialog()
       ->setTitle($title)
       ->appendChild($body)
       ->addCancelButton($return_uri);
@@ -156,7 +143,7 @@ final class HarbormasterBuildActionController
       $dialog->addSubmitButton($submit);
     }
 
-    return id(new AphrontDialogResponse())->setDialog($dialog);
+    return $dialog;
   }
 
 }

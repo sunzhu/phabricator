@@ -8,6 +8,7 @@ final class AlmanacDeviceQuery
   private $names;
   private $namePrefix;
   private $nameSuffix;
+  private $isClusterDevice;
 
   public function withIDs(array $ids) {
     $this->ids = $ids;
@@ -38,6 +39,11 @@ final class AlmanacDeviceQuery
     return $this->withNgramsConstraint(
       new AlmanacDeviceNameNgrams(),
       $ngrams);
+  }
+
+  public function withIsClusterDevice($is_cluster_device) {
+    $this->isClusterDevice = $is_cluster_device;
+    return $this;
   }
 
   public function newResultObject() {
@@ -90,6 +96,13 @@ final class AlmanacDeviceQuery
         $this->nameSuffix);
     }
 
+    if ($this->isClusterDevice !== null) {
+      $where[] = qsprintf(
+        $conn,
+        'device.isBoundToClusterService = %d',
+        (int)$this->isClusterDevice);
+    }
+
     return $where;
   }
 
@@ -109,11 +122,10 @@ final class AlmanacDeviceQuery
     );
   }
 
-  protected function getPagingValueMap($cursor, array $keys) {
-    $device = $this->loadCursorObject($cursor);
+  protected function newPagingMapFromPartialObject($object) {
     return array(
-      'id' => $device->getID(),
-      'name' => $device->getName(),
+      'id' => (int)$object->getID(),
+      'name' => $object->getName(),
     );
   }
 

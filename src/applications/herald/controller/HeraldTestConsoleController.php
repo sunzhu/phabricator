@@ -38,8 +38,18 @@ final class HeraldTestConsoleController extends HeraldController {
 
     $object = $this->getTestObject();
     $adapter = $this->getTestAdapter();
+    $source = $this->newContentSource($object);
 
-    $adapter->setIsNewObject(false);
+    $adapter
+      ->setContentSource($source)
+      ->setIsNewObject(false)
+      ->setActingAsPHID($viewer->getPHID())
+      ->setViewer($viewer);
+
+    $applied_xactions = $this->loadAppliedTransactions($object);
+    if ($applied_xactions !== null) {
+      $adapter->setAppliedTransactions($applied_xactions);
+    }
 
     $rules = id(new HeraldRuleQuery())
       ->setViewer($viewer)
@@ -213,6 +223,99 @@ final class HeraldTestConsoleController extends HeraldController {
       ->setTitle($title)
       ->setCrumbs($crumbs)
       ->appendChild($view);
+  }
+
+  private function newContentSource($object) {
+    $viewer = $this->getViewer();
+
+    // Try using the content source associated with the most recent transaction
+    // on the object.
+
+    $query = PhabricatorApplicationTransactionQuery::newQueryForObject($object);
+
+    $xaction = $query
+      ->setViewer($viewer)
+      ->withObjectPHIDs(array($object->getPHID()))
+      ->setLimit(1)
+      ->setOrder('newest')
+      ->executeOne();
+    if ($xaction) {
+      return $xaction->getContentSource();
+    }
+
+    // If we couldn't find a transaction (which should be rare), fall back to
+    // building a new content source from the test console request itself.
+
+    $request = $this->getRequest();
+    return PhabricatorContentSource::newFromRequest($request);
+  }
+
+  private function loadAppliedTransactions($object) {
+    $viewer = $this->getViewer();
+
+    if (!($object instanceof PhabricatorApplicationTransactionInterface)) {
+      return null;
+    }
+
+    $query = PhabricatorApplicationTransactionQuery::newQueryForObject(
+      $object);
+
+    $query
+      ->withObjectPHIDs(array($object->getPHID()))
+      ->setViewer($viewer);
+
+    $xactions = new PhabricatorQueryIterator($query);
+
+    $applied = array();
+
+    $recent_id = null;
+    $hard_limit = 1000;
+    foreach ($xactions as $xaction) {
+
+      // If this transaction has Herald transcript metadata, it was applied by
+      // Herald. Exclude it from the list because the Herald rule engine always
+      // runs before Herald transactions apply, so there's no way that real
+      // rules would have seen this transaction.
+      $transcript_id = $xaction->getMetadataValue('herald:transcriptID');
+      if ($transcript_id !== null) {
+        continue;
+      }
+
+      $group_id = $xaction->getTransactionGroupID();
+
+      // If this is the first transaction, save the group ID: we want to
+      // select all transactions in the same group.
+      if (!$applied) {
+        $recent_id = $group_id;
+        if ($recent_id === null) {
+          // If the first transaction has no group ID, it is likely an older
+          // transaction from before the introduction of group IDs. In this
+          // case, select only the most recent transaction and bail out.
+          $applied[] = $xaction;
+          break;
+        }
+      }
+
+      // If this transaction is from a different transaction group, we've
+      // found all the transactions applied in the most recent group.
+      if ($group_id !== $recent_id) {
+        break;
+      }
+
+      $applied[] = $xaction;
+
+      if (count($applied) > $hard_limit) {
+        throw new Exception(
+          pht(
+            'This object ("%s") has more than %s transactions in its most '.
+            'recent transaction group; this is too many.',
+            $object->getPHID(),
+            new PhutilNumber($hard_limit)));
+      }
+    }
+
+    return $applied;
+
   }
 
 }

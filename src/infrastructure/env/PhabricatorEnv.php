@@ -135,6 +135,11 @@ final class PhabricatorEnv extends Phobject {
     // TODO: Add a "locale.default" config option once we have some reasonable
     // defaults which aren't silly nonsense.
     self::setLocaleCode('en_US');
+
+    // Load the preamble utility library if we haven't already. On web
+    // requests this loaded earlier, but we want to load it for non-web
+    // requests so that unit tests can call these functions.
+    require_once $phabricator_path.'/support/startup/preamble-utils.php';
   }
 
   public static function beginScopedLocale($locale_code) {
@@ -221,6 +226,10 @@ final class PhabricatorEnv extends Phobject {
 
     foreach ($site_sources as $site_source) {
       $stack->pushSource($site_source);
+
+      // If the site source did anything which reads config, throw it away
+      // to make sure any additional site sources get clean reads.
+      self::dropConfigCache();
     }
 
     $masters = PhabricatorDatabaseRef::getMasterDatabaseRefs();
@@ -245,9 +254,17 @@ final class PhabricatorEnv extends Phobject {
     }
 
     try {
-      $stack->pushSource(
-        id(new PhabricatorConfigDatabaseSource('default'))
-          ->setName(pht('Database')));
+      // See T13403. If we're starting up in "config optional" mode, suppress
+      // messages about connection retries.
+      if ($config_optional) {
+        $database_source = @new PhabricatorConfigDatabaseSource('default');
+      } else {
+        $database_source = new PhabricatorConfigDatabaseSource('default');
+      }
+
+      $database_source->setName(pht('Database'));
+
+      $stack->pushSource($database_source);
     } catch (AphrontSchemaQueryException $exception) {
       // If the database is not available, just skip this configuration
       // source. This happens during `bin/storage upgrade`, `bin/conf` before
@@ -259,6 +276,10 @@ final class PhabricatorEnv extends Phobject {
         throw $ex;
       }
     }
+
+    // Drop the config cache one final time to make sure we're getting clean
+    // reads now that we've finished building the stack.
+    self::dropConfigCache();
   }
 
   public static function repairConfig($key, $value) {
@@ -475,11 +496,17 @@ final class PhabricatorEnv extends Phobject {
    * @task read
    */
   public static function getDoclink($resource, $type = 'article') {
-    $uri = new PhutilURI('https://secure.phabricator.com/diviner/find/');
-    $uri->setQueryParam('name', $resource);
-    $uri->setQueryParam('type', $type);
-    $uri->setQueryParam('jump', true);
-    return (string)$uri;
+    $params = array(
+      'name' => $resource,
+      'type' => $type,
+      'jump' => true,
+    );
+
+    $uri = new PhutilURI(
+      'https://secure.phabricator.com/diviner/find/',
+      $params);
+
+    return phutil_string_cast($uri);
   }
 
 
@@ -678,7 +705,7 @@ final class PhabricatorEnv extends Phobject {
    * Detect if a URI identifies some valid linkable remote resource.
    *
    * @param string URI to test.
-   * @return bool True if a URI idenfies a remote resource with an allowed
+   * @return bool True if a URI identifies a remote resource with an allowed
    *              protocol.
    * @task uri
    */

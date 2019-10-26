@@ -38,11 +38,6 @@ final class PhabricatorDiffusionConfigOptions
 
     return array(
       $this->newOption(
-        'metamta.diffusion.subject-prefix',
-        'string',
-        '[Diffusion]')
-        ->setDescription(pht('Subject prefix for Diffusion mail.')),
-      $this->newOption(
         'metamta.diffusion.attach-patches',
         'bool',
         false)
@@ -101,7 +96,7 @@ final class PhabricatorDiffusionConfigOptions
         ->setBoolOptions(
           array(
             pht('Allow HTTP Basic Auth'),
-            pht('Disable HTTP Basic Auth'),
+            pht('Disallow HTTP Basic Auth'),
           ))
         ->setSummary(pht('Enable HTTP Basic Auth for repositories.'))
         ->setDescription(
@@ -115,6 +110,19 @@ final class PhabricatorDiffusionConfigOptions
             "barrier to attackers than SSH does.\n\n".
             "Consider using SSH for authenticated access to repositories ".
             "instead of HTTP.")),
+      $this->newOption('diffusion.allow-git-lfs', 'bool', false)
+        ->setBoolOptions(
+          array(
+            pht('Allow Git LFS'),
+            pht('Disallow Git LFS'),
+          ))
+        ->setLocked(true)
+        ->setSummary(pht('Allow Git Large File Storage (LFS).'))
+        ->setDescription(
+          pht(
+            'Phabricator supports Git LFS, a Git extension for storing large '.
+            'files alongside a repository. Activate this setting to allow '.
+            'the extension to store file data in Phabricator.')),
       $this->newOption('diffusion.ssh-user', 'string', null)
         ->setLocked(true)
         ->setSummary(pht('Login username for SSH connections to repositories.'))

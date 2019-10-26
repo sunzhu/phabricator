@@ -98,7 +98,8 @@ abstract class PhabricatorController extends AphrontController {
 
 
       if (!$user->isLoggedIn()) {
-        $user->attachAlternateCSRFString(PhabricatorHash::weakDigest($phsid));
+        $csrf = PhabricatorHash::digestWithNamedKey($phsid, 'csrf.alternate');
+        $user->attachAlternateCSRFString($csrf);
       }
 
       $request->setUser($user);
@@ -137,10 +138,6 @@ abstract class PhabricatorController extends AphrontController {
     }
 
     if ($this->shouldRequireEnabledUser()) {
-      if ($user->isLoggedIn() && !$user->getIsApproved()) {
-        $controller = new PhabricatorAuthNeedsApprovalController();
-        return $this->delegateToController($controller);
-      }
       if ($user->getIsDisabled()) {
         $controller = new PhabricatorDisabledUserController();
         return $this->delegateToController($controller);
@@ -158,6 +155,15 @@ abstract class PhabricatorController extends AphrontController {
         $this->setCurrentApplication($auth_application);
         return $this->delegateToController($login_controller);
       }
+    }
+
+    // Require users sign Legalpad documents before we check if they have
+    // MFA. If we don't do this, they can get stuck in a state where they
+    // can't add MFA until they sign, and can't sign until they add MFA.
+    // See T13024 and PHI223.
+    $result = $this->requireLegalpadSignatures();
+    if ($result !== null) {
+      return $result;
     }
 
     // Check if the user needs to configure MFA.
@@ -224,46 +230,15 @@ abstract class PhabricatorController extends AphrontController {
           ->withPHIDs(array($application->getPHID()))
           ->executeOne();
       }
-    }
 
-
-    if (!$this->shouldAllowLegallyNonCompliantUsers()) {
-      $legalpad_class = 'PhabricatorLegalpadApplication';
-      $legalpad = id(new PhabricatorApplicationQuery())
-        ->setViewer($user)
-        ->withClasses(array($legalpad_class))
-        ->withInstalled(true)
-        ->execute();
-      $legalpad = head($legalpad);
-
-      $doc_query = id(new LegalpadDocumentQuery())
-        ->setViewer($user)
-        ->withSignatureRequired(1)
-        ->needViewerSignatures(true);
-
-      if ($user->hasSession() &&
-          !$user->getSession()->getIsPartial() &&
-          !$user->getSession()->getSignedLegalpadDocuments() &&
-          $user->isLoggedIn() &&
-          $legalpad) {
-
-        $sign_docs = $doc_query->execute();
-        $must_sign_docs = array();
-        foreach ($sign_docs as $sign_doc) {
-          if (!$sign_doc->getUserSignature($user->getPHID())) {
-            $must_sign_docs[] = $sign_doc;
-          }
-        }
-        if ($must_sign_docs) {
-          $controller = new LegalpadDocumentSignController();
-          $this->getRequest()->setURIMap(array(
-            'id' => head($must_sign_docs)->getID(),
-          ));
-          $this->setCurrentApplication($legalpad);
+      // If users need approval, require they wait here. We do this near the
+      // end so they can take other actions (like verifying email, signing
+      // documents, and enrolling in MFA) while waiting for an admin to take a
+      // look at things. See T13024 for more discussion.
+      if ($this->shouldRequireEnabledUser()) {
+        if ($user->isLoggedIn() && !$user->getIsApproved()) {
+          $controller = new PhabricatorAuthNeedsApprovalController();
           return $this->delegateToController($controller);
-        } else {
-          $engine = id(new PhabricatorAuthSessionEngine())
-            ->signLegalpadDocuments($user, $sign_docs);
         }
       }
     }
@@ -324,6 +299,7 @@ abstract class PhabricatorController extends AphrontController {
           ->setContent(
             array(
               'redirect' => $response->getURI(),
+              'close' => $response->getCloseDialogBeforeRedirect(),
             ));
       }
     }
@@ -505,16 +481,27 @@ abstract class PhabricatorController extends AphrontController {
 
   protected function buildTransactionTimeline(
     PhabricatorApplicationTransactionInterface $object,
-    PhabricatorApplicationTransactionQuery $query,
+    PhabricatorApplicationTransactionQuery $query = null,
     PhabricatorMarkupEngine $engine = null,
-    $render_data = array()) {
+    $view_data = array()) {
 
-    $viewer = $this->getRequest()->getUser();
+    $request = $this->getRequest();
+    $viewer = $this->getViewer();
     $xaction = $object->getApplicationTransactionTemplate();
-    $view = $xaction->getApplicationTransactionViewObject();
+
+    if (!$query) {
+      $query = PhabricatorApplicationTransactionQuery::newQueryForObject(
+        $object);
+      if (!$query) {
+        throw new Exception(
+          pht(
+            'Unable to find transaction query for object of class "%s".',
+            get_class($object)));
+      }
+    }
 
     $pager = id(new AphrontCursorPagerView())
-      ->readFromRequest($this->getRequest())
+      ->readFromRequest($request)
       ->setURI(new PhutilURI(
         '/transactions/showolder/'.$object->getPHID().'/'));
 
@@ -524,6 +511,13 @@ abstract class PhabricatorController extends AphrontController {
       ->needComments(true)
       ->executeWithCursorPager($pager);
     $xactions = array_reverse($xactions);
+
+    $timeline_engine = PhabricatorTimelineEngine::newForObject($object)
+      ->setViewer($viewer)
+      ->setTransactions($xactions)
+      ->setViewData($view_data);
+
+    $view = $timeline_engine->buildTimelineView();
 
     if ($engine) {
       foreach ($xactions as $xaction) {
@@ -538,24 +532,95 @@ abstract class PhabricatorController extends AphrontController {
     }
 
     $timeline = $view
-      ->setUser($viewer)
-      ->setObjectPHID($object->getPHID())
-      ->setTransactions($xactions)
       ->setPager($pager)
-      ->setRenderData($render_data)
       ->setQuoteTargetID($this->getRequest()->getStr('quoteTargetID'))
       ->setQuoteRef($this->getRequest()->getStr('quoteRef'));
-    $object->willRenderTimeline($timeline, $this->getRequest());
 
     return $timeline;
   }
 
 
   public function buildApplicationCrumbsForEditEngine() {
-    // TODO: This is kind of gross, I'm bascially just making this public so
+    // TODO: This is kind of gross, I'm basically just making this public so
     // I can use it in EditEngine. We could do this without making it public
     // by using controller delegation, or make it properly public.
     return $this->buildApplicationCrumbs();
+  }
+
+  private function requireLegalpadSignatures() {
+    if (!$this->shouldRequireLogin()) {
+      return null;
+    }
+
+    if ($this->shouldAllowLegallyNonCompliantUsers()) {
+      return null;
+    }
+
+    $viewer = $this->getViewer();
+
+    if (!$viewer->hasSession()) {
+      return null;
+    }
+
+    $session = $viewer->getSession();
+    if ($session->getIsPartial()) {
+      // If the user hasn't made it through MFA yet, require they survive
+      // MFA first.
+      return null;
+    }
+
+    if ($session->getSignedLegalpadDocuments()) {
+      return null;
+    }
+
+    if (!$viewer->isLoggedIn()) {
+      return null;
+    }
+
+    $must_sign_docs = array();
+    $sign_docs = array();
+
+    $legalpad_class = 'PhabricatorLegalpadApplication';
+    $legalpad_installed = PhabricatorApplication::isClassInstalledForViewer(
+      $legalpad_class,
+      $viewer);
+    if ($legalpad_installed) {
+      $sign_docs = id(new LegalpadDocumentQuery())
+        ->setViewer($viewer)
+        ->withSignatureRequired(1)
+        ->needViewerSignatures(true)
+        ->setOrder('oldest')
+        ->execute();
+
+      foreach ($sign_docs as $sign_doc) {
+        if (!$sign_doc->getUserSignature($viewer->getPHID())) {
+          $must_sign_docs[] = $sign_doc;
+        }
+      }
+    }
+
+    if (!$must_sign_docs) {
+      // If nothing needs to be signed (either because there are no documents
+      // which require a signature, or because the user has already signed
+      // all of them) mark the session as good and continue.
+      $engine = id(new PhabricatorAuthSessionEngine())
+        ->signLegalpadDocuments($viewer, $sign_docs);
+
+      return null;
+    }
+
+    $request = $this->getRequest();
+    $request->setURIMap(
+      array(
+        'id' => head($must_sign_docs)->getID(),
+      ));
+
+    $application = PhabricatorApplication::getByClass($legalpad_class);
+    $this->setCurrentApplication($application);
+
+    $controller = new LegalpadDocumentSignController();
+    $controller->setIsSessionGate(true);
+    return $this->delegateToController($controller);
   }
 
 

@@ -1,7 +1,7 @@
 <?php
 
 final class PhrictionDocumentMoveToTransaction
-  extends PhrictionDocumentTransactionType {
+  extends PhrictionDocumentVersionTransaction {
 
   const TRANSACTIONTYPE = 'move-to';
 
@@ -11,6 +11,7 @@ final class PhrictionDocumentMoveToTransaction
 
   public function generateNewValue($object, $value) {
     $document = $value;
+
     $dict = array(
       'id' => $document->getID(),
       'phid' => $document->getPHID(),
@@ -26,19 +27,17 @@ final class PhrictionDocumentMoveToTransaction
 
   public function applyInternalEffects($object, $value) {
     $object->setStatus(PhrictionDocumentStatus::STATUS_EXISTS);
-  }
 
-  public function applyExternalEffects($object, $value) {
-    $dict = $value;
-    $this->getEditor()->getNewContent()->setContent($dict['content']);
-    $this->getEditor()->getNewContent()->setTitle($dict['title']);
-    $this->getEditor()->getNewContent()->setChangeType(
-      PhrictionChangeType::CHANGE_MOVE_HERE);
-    $this->getEditor()->getNewContent()->setChangeRef($dict['id']);
+    $content = $this->getNewDocumentContent($object);
+
+    $content->setContent($value['content']);
+    $content->setTitle($value['title']);
+    $content->setChangeType(PhrictionChangeType::CHANGE_MOVE_HERE);
+    $content->setChangeRef($value['id']);
   }
 
   public function getActionStrength() {
-    return 1.0;
+    return 100;
   }
 
   public function getActionName() {
@@ -50,7 +49,7 @@ final class PhrictionDocumentMoveToTransaction
     $new = $this->getNewValue();
 
     return pht(
-      '%s moved this document from %s',
+      '%s moved this document from %s.',
       $this->renderAuthor(),
       $this->renderHandle($new['phid']));
   }
@@ -100,6 +99,10 @@ final class PhrictionDocumentMoveToTransaction
 
   public function getIcon() {
     return 'fa-arrows';
+  }
+
+  public function shouldHideForFeed() {
+    return true;
   }
 
 }

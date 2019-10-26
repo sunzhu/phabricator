@@ -24,6 +24,7 @@ final class PHUITagView extends AphrontTagView {
   const COLOR_BLUEGREY      = 'bluegrey';
   const COLOR_CHECKERED     = 'checkered';
   const COLOR_DISABLED      = 'disabled';
+  const COLOR_PLACEHOLDER = 'placeholder';
 
   const COLOR_OBJECT        = 'object';
   const COLOR_PERSON        = 'person';
@@ -117,8 +118,8 @@ final class PHUITagView extends AphrontTagView {
     return $this;
   }
 
-  public function setSlimShady($mm) {
-    $this->slimShady = $mm;
+  public function setSlimShady($is_eminem) {
+    $this->slimShady = $is_eminem;
     return $this;
   }
 
@@ -154,25 +155,30 @@ final class PHUITagView extends AphrontTagView {
       $classes[] = 'phui-tag-'.$this->border;
     }
 
-    if ($this->phid) {
-      Javelin::initBehavior('phui-hovercards');
+    $attributes = array(
+      'href' => $this->href,
+      'class' => $classes,
+    );
 
-      $attributes = array(
-        'href'  => $this->href,
-        'sigil' => 'hovercard',
-        'meta'  => array(
-          'hoverPHID' => $this->phid,
-        ),
-        'target' => $this->external ? '_blank' : null,
-      );
-    } else {
-      $attributes = array(
-        'href'  => $this->href,
-        'target' => $this->external ? '_blank' : null,
+    if ($this->external) {
+      $attributes += array(
+        'target' => '_blank',
+        'rel' => 'noreferrer',
       );
     }
 
-    return $attributes + array('class' => $classes);
+    if ($this->phid) {
+      Javelin::initBehavior('phui-hovercards');
+
+      $attributes += array(
+        'sigil' => 'hovercard',
+        'meta' => array(
+          'hoverPHID' => $this->phid,
+        ),
+      );
+    }
+
+    return $attributes;
   }
 
   protected function getTagContent() {

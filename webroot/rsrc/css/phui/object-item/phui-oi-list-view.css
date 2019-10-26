@@ -132,11 +132,15 @@ ul.phui-oi-list-view {
   background: url('/rsrc/image/texture/grip.png') center center no-repeat;
 }
 
+.phui-oi-ungrippable .phui-oi-grip {
+  opacity: 0.25;
+}
+
 .device .phui-oi-grip {
   display: none;
 }
 
-.phui-oi-grippable .phui-oi-frame {
+.phui-oi-has-grip .phui-oi-frame {
   padding-left: 16px;
 }
 
@@ -455,6 +459,10 @@ ul.phui-oi-list-view .phui-oi-selected
   border-color: {$sh-blueborder};
 }
 
+.phui-oi-forbidden {
+  background: {$sh-redbackground};
+}
+
 
 /* - Handle Icons --------------------------------------------------------------
 
@@ -603,11 +611,6 @@ ul.phui-oi-list-view .phui-oi-selected
    border-top: none;
  }
 
-.dashboard-pane .phui-oi-empty .phui-info-view {
-  border: none;
-  margin: 0;
-}
-
 .device-desktop .aphront-multi-column-fluid .aphront-multi-column-2-up
  .aphront-multi-column-column-outer.third .phui-oi-col2 {
    display: none;
@@ -663,4 +666,62 @@ ul.phui-oi-list-view .phui-oi-selected
 .device-phone .phui-oi-col2.phui-oi-side-column {
   padding: 0 8px 8px;
   text-align: left;
+}
+
+.phui-oi-col0.phui-oi-checkbox {
+  width: 28px;
+  text-align: center;
+}
+
+.phui-oi-selectable {
+  cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* When the list selection state can be toggled on the client (as in the bulk
+  editor), keep the border color consistent to make the interaction feel more
+  robust. */
+ul.phui-oi-list-view .phui-oi-selectable
+  .phui-oi-frame {
+  border-color: {$blueborder};
+}
+
+.differential-revision-size {
+  padding: 0 4px;
+  border-radius: 4px;
+  background: {$lightgreybackground};
+  cursor: pointer;
+}
+
+.differential-revision-size .phui-icon-view {
+  margin: 0 1px 0 1px;
+  font-size: 7px;
+  position: relative;
+  top: -2px;
+  color: {$lightbluetext};
+}
+
+.differential-revision-large {
+  background: {$sh-orangebackground};
+}
+
+/* NOTE: These are intentionally using nonstandard colors, see T13127. */
+
+.differential-revision-large .phui-icon-view {
+  color: #e5ae7e;
+}
+
+.differential-revision-small {
+  background: #f2f7ff;
+}
+
+.differential-revision-small .phui-icon-view {
+  color: #6699ba;
+}
+
+.phui-oi-tail {
+  text-align: center;
+  padding: 8px 0;
+  background: linear-gradient({$lightbluebackground}, #fff 66%, #fff);
 }

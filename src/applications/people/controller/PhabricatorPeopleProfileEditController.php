@@ -38,10 +38,9 @@ final class PhabricatorPeopleProfileEditController
         new PhabricatorUserTransaction(),
         $request);
 
-      $editor = id(new PhabricatorUserProfileEditor())
+      $editor = id(new PhabricatorUserTransactionEditor())
         ->setActor($viewer)
-        ->setContentSource(
-          PhabricatorContentSource::newFromRequest($request))
+        ->setContentSourceFromRequest($request)
         ->setContinueOnNoEffect(true);
 
       try {
@@ -84,8 +83,9 @@ final class PhabricatorPeopleProfileEditController
     $crumbs->addTextCrumb(pht('Edit Profile'));
     $crumbs->setBorder(true);
 
-    $nav = $this->getProfileMenu();
-    $nav->selectFilter(PhabricatorPeopleProfileMenuEngine::ITEM_MANAGE);
+    $nav = $this->newNavigation(
+      $user,
+      PhabricatorPeopleProfileMenuEngine::ITEM_MANAGE);
 
     $header = id(new PHUIHeaderView())
       ->setHeader(pht('Edit Profile: %s', $user->getFullName()))

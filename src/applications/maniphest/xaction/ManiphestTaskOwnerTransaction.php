@@ -31,7 +31,7 @@ final class ManiphestTaskOwnerTransaction
   }
 
   public function getActionStrength() {
-    return 1.2;
+    return 120;
   }
 
   public function getActionName() {
@@ -154,5 +154,15 @@ final class ManiphestTaskOwnerTransaction
 
   }
 
+  public function getTransactionTypeForConduit($xaction) {
+    return 'owner';
+  }
+
+  public function getFieldValuesForConduit($xaction, $data) {
+    return array(
+      'old' => $xaction->getOldValue(),
+      'new' => $xaction->getNewValue(),
+    );
+  }
 
 }

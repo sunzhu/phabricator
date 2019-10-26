@@ -41,9 +41,15 @@ final class PhabricatorRepositoryRepositoryPHIDType
       $name = $repository->getName();
       $uri = $repository->getURI();
 
-      $handle->setName($monogram);
-      $handle->setFullName("{$monogram} {$name}");
-      $handle->setURI($uri);
+      $handle
+        ->setName($monogram)
+        ->setFullName("{$monogram} {$name}")
+        ->setURI($uri)
+        ->setMailStampName($monogram);
+
+      if ($repository->getStatus() !== PhabricatorRepository::STATUS_ACTIVE) {
+        $handle->setStatus(PhabricatorObjectHandle::STATUS_CLOSED);
+      }
     }
   }
 

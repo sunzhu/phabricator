@@ -270,11 +270,20 @@ abstract class DifferentialChangesetHTMLRenderer
       }
     }
 
-    if ($this->getHighlightingDisabled()) {
-      $messages[] = pht(
-        'This file is larger than %s, so syntax highlighting is '.
-        'disabled by default.',
-        phutil_format_bytes(DifferentialChangesetParser::HIGHLIGHT_BYTE_LIMIT));
+    $blocks = $this->getDocumentEngineBlocks();
+    if ($blocks) {
+      foreach ($blocks->getMessages() as $message) {
+        $messages[] = $message;
+      }
+    } else {
+      if ($this->getHighlightingDisabled()) {
+        $byte_limit = DifferentialChangesetParser::HIGHLIGHT_BYTE_LIMIT;
+        $byte_limit = phutil_format_bytes($byte_limit);
+        $messages[] = pht(
+          'This file is larger than %s, so syntax highlighting is '.
+          'disabled by default.',
+          $byte_limit);
+      }
     }
 
     return $this->formatHeaderMessages($messages);
@@ -367,7 +376,6 @@ abstract class DifferentialChangesetHTMLRenderer
     $reference = $this->getRenderingReference();
 
     if ($force !== 'text' &&
-        $force !== 'whitespace' &&
         $force !== 'none' &&
         $force !== 'default') {
       throw new Exception(
@@ -387,10 +395,6 @@ abstract class DifferentialChangesetHTMLRenderer
       'ref'   => $reference,
       'range' => $range,
     );
-
-    if ($force == 'whitespace') {
-      $meta['whitespace'] = DifferentialChangesetParser::WHITESPACE_SHOW_ALL;
-    }
 
     $content = array();
     $content[] = $message;
@@ -437,16 +441,26 @@ abstract class DifferentialChangesetHTMLRenderer
     $classes[] = 'PhabricatorMonospaced';
     $classes[] = $this->getRendererTableClass();
 
+    $sigils = array();
+    $sigils[] = 'differential-diff';
+    foreach ($this->getTableSigils() as $sigil) {
+      $sigils[] = $sigil;
+    }
+
     return javelin_tag(
       'table',
       array(
         'class' => implode(' ', $classes),
-        'sigil' => 'differential-diff',
+        'sigil' => implode(' ', $sigils),
       ),
       array(
         $this->renderColgroup(),
         $content,
       ));
+  }
+
+  protected function getTableSigils() {
+    return array();
   }
 
   protected function buildInlineComment(
@@ -601,19 +615,6 @@ abstract class DifferentialChangesetHTMLRenderer
     }
 
     return array($left_prefix, $right_prefix);
-  }
-
-  protected function renderImageStage(PhabricatorFile $file) {
-    return phutil_tag(
-      'div',
-      array(
-        'class' => 'differential-image-stage',
-      ),
-      phutil_tag(
-        'img',
-        array(
-          'src' => $file->getBestURI(),
-        )));
   }
 
 }

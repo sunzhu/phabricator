@@ -3,7 +3,6 @@
 final class PhabricatorUserLogView extends AphrontView {
 
   private $logs;
-  private $handles;
   private $searchBaseURI;
 
   public function setSearchBaseURI($search_base_uri) {
@@ -17,70 +16,99 @@ final class PhabricatorUserLogView extends AphrontView {
     return $this;
   }
 
-  public function setHandles(array $handles) {
-    assert_instances_of($handles, 'PhabricatorObjectHandle');
-    $this->handles = $handles;
-    return $this;
-  }
-
   public function render() {
     $logs = $this->logs;
-    $handles = $this->handles;
     $viewer = $this->getUser();
 
-    $action_map = PhabricatorUserLog::getActionTypeMap();
+    $phids = array();
+    foreach ($logs as $log) {
+      $phids[] = $log->getActorPHID();
+      $phids[] = $log->getUserPHID();
+    }
+    $handles = $viewer->loadHandles($phids);
+
+    $types = PhabricatorUserLogType::getAllLogTypes();
+    $types = mpull($types, 'getLogTypeName', 'getLogTypeKey');
+
     $base_uri = $this->searchBaseURI;
+
+    $viewer_phid = $viewer->getPHID();
 
     $rows = array();
     foreach ($logs as $log) {
-      $ip = $log->getRemoteAddr();
       $session = substr($log->getSession(), 0, 6);
 
-      if ($base_uri) {
-        $ip = phutil_tag(
-          'a',
-          array(
-            'href' => $base_uri.'?ip='.$ip.'#R',
-          ),
-          $ip);
+      $actor_phid = $log->getActorPHID();
+      $user_phid = $log->getUserPHID();
+
+      $remote_address = $log->getRemoteAddressForViewer($viewer);
+      if ($remote_address !== null) {
+        if ($base_uri) {
+          $remote_address = phutil_tag(
+            'a',
+            array(
+              'href' => $base_uri.'?ip='.$remote_address.'#R',
+            ),
+            $remote_address);
+        }
       }
 
       $action = $log->getAction();
-      $action_name = idx($action_map, $action, $action);
+      $action_name = idx($types, $action, $action);
+
+      if ($actor_phid) {
+        $actor_name = $handles[$actor_phid]->renderLink();
+      } else {
+        $actor_name = null;
+      }
+
+      if ($user_phid) {
+        $user_name = $handles[$user_phid]->renderLink();
+      } else {
+        $user_name = null;
+      }
+
+      $action_link = phutil_tag(
+        'a',
+        array(
+          'href' => $log->getURI(),
+        ),
+        $action_name);
 
       $rows[] = array(
+        $log->getID(),
+        $action_link,
+        $actor_name,
+        $user_name,
+        $remote_address,
+        $session,
         phabricator_date($log->getDateCreated(), $viewer),
         phabricator_time($log->getDateCreated(), $viewer),
-        $action_name,
-        $log->getActorPHID()
-          ? $handles[$log->getActorPHID()]->getName()
-          : null,
-        $username = $handles[$log->getUserPHID()]->renderLink(),
-        $ip,
-        $session,
       );
     }
 
     $table = new AphrontTableView($rows);
     $table->setHeaders(
       array(
-        pht('Date'),
-        pht('Time'),
+        pht('ID'),
         pht('Action'),
         pht('Actor'),
         pht('User'),
         pht('IP'),
         pht('Session'),
+        pht('Date'),
+        pht('Time'),
       ));
     $table->setColumnClasses(
       array(
         '',
-        'right',
         'wide',
         '',
         '',
         '',
         'n',
+        '',
+        'right',
       ));
 
     return $table;
